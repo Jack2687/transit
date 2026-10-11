@@ -73,6 +73,139 @@ func TestChannelQualitySuspensionDefaultOffAndReenable(t *testing.T) {
 	f.assertActions(t, "inactive", "active")
 }
 
+func TestChannelSuspensionSwitchesIndependentlyGateTheirOwnReason(t *testing.T) {
+	for _, healthEnabled := range []bool{false, true} {
+		for _, qualityEnabled := range []bool{false, true} {
+			for _, healthFailed := range []bool{false, true} {
+				f := newQualityActionFixture(t)
+				ctx := context.Background()
+				_, _ = f.svc.SetChannelSuspension(ctx, "user", qualityActionTarget, healthEnabled)
+				_, _ = f.svc.SetChannelQualitySuspension(ctx, "user", qualityActionTarget, qualityEnabled)
+				for i := 0; i < 3; i++ {
+					f.probe(t, "failed", true)
+				}
+				if healthFailed {
+					state := f.health.states[qualityActionTarget]["quality-model"]
+					state.State = StateSuspended
+					f.health.states[qualityActionTarget]["quality-model"] = state
+				}
+				if err := f.svc.reconcileQualityTarget(ctx, "user", "ws1", qualityActionTarget); err != nil {
+					t.Fatal(err)
+				}
+				if qualityEnabled || (healthEnabled && healthFailed) {
+					f.assertActions(t, "inactive")
+				} else {
+					f.assertActions(t)
+				}
+				f.maintain()
+				if qualityEnabled || (healthEnabled && healthFailed) {
+					f.assertActions(t, "inactive")
+				} else {
+					f.assertActions(t)
+				}
+			}
+		}
+	}
+}
+
+func TestQualitySuspensionWithHealthPauseOffRecoversAtQualityThreshold(t *testing.T) {
+	for _, healthSamples := range []string{"none", "healthy", "previously suspended"} {
+		t.Run(healthSamples, func(t *testing.T) {
+			f := newQualityActionFixture(t)
+			if _, err := f.svc.SetChannelSuspension(context.Background(), "user", qualityActionTarget, false); err != nil {
+				t.Fatal(err)
+			}
+			switch healthSamples {
+			case "none":
+				delete(f.health.states, qualityActionTarget)
+			case "previously suspended":
+				state := f.health.states[qualityActionTarget]["quality-model"]
+				state.State = StateSuspended
+				f.health.states[qualityActionTarget]["quality-model"] = state
+			}
+			f.probe(t, "failed", true)
+			f.probe(t, "failed", false)
+			f.assertActions(t)
+			f.probe(t, "failed", false)
+			f.assertActions(t, "inactive")
+			f.maintain()
+			f.assertActions(t, "inactive")
+			f.probe(t, "passed", false)
+			f.maintain()
+			f.assertActions(t, "inactive")
+			f.probe(t, "passed", false)
+			f.assertActions(t, "inactive", "active")
+			if len(f.health.targetActionStates) != 0 {
+				t.Fatal("quality recovery retained ownership with health pause disabled")
+			}
+		})
+	}
+}
+
+func TestHealthPauseOffCannotReleaseExistingQualitySuspension(t *testing.T) {
+	f := newQualityActionFixture(t)
+	for i := 0; i < 3; i++ {
+		f.probe(t, "failed", true)
+	}
+	if _, err := f.svc.SetChannelSuspension(context.Background(), "user", qualityActionTarget, false); err != nil {
+		t.Fatal(err)
+	}
+	f.maintain()
+	f.assertActions(t, "inactive")
+	if !f.health.targetActionStates["user|ws1|"+qualityActionTarget].QualitySuspended {
+		t.Fatal("health opt-out released the independent quality hold")
+	}
+	if _, err := f.svc.SetChannelQualitySuspension(context.Background(), "user", qualityActionTarget, false); err != nil {
+		t.Fatal(err)
+	}
+	f.assertActions(t, "inactive", "active")
+}
+
+func TestQualityOnlySuspensionRetriesFailedUpstreamWrites(t *testing.T) {
+	f := newQualityActionFixture(t)
+	_, _ = f.svc.SetChannelSuspension(context.Background(), "user", qualityActionTarget, false)
+	f.remote.sub2APIErr = errors.New("offline")
+	for i := 0; i < 3; i++ {
+		f.probe(t, "failed", true)
+	}
+	f.assertActions(t, "inactive")
+	f.remote.sub2APIErr = nil
+	f.maintain()
+	f.assertActions(t, "inactive", "inactive")
+	f.probe(t, "passed", true)
+	f.remote.sub2APIErr = errors.New("offline")
+	f.probe(t, "passed", true)
+	f.assertActions(t, "inactive", "inactive", "active")
+	f.remote.sub2APIErr = nil
+	f.maintain()
+	f.assertActions(t, "inactive", "inactive", "active", "active")
+	if len(f.health.targetActionStates) != 0 {
+		t.Fatal("quality-only restore did not complete on retry")
+	}
+}
+
+func TestQualityRecoveryPolicyReadFailureCannotReleaseHealth(t *testing.T) {
+	f := newQualityActionFixture(t)
+	for i := 0; i < 3; i++ {
+		f.probe(t, "failed", true)
+	}
+	state := f.health.states[qualityActionTarget]["quality-model"]
+	state.State = StateSuspended
+	f.health.states[qualityActionTarget]["quality-model"] = state
+	qualityState := f.quality.states["user|ws1"][qualityActionTarget]
+	qualityState.Degraded = false
+	f.quality.states["user|ws1"][qualityActionTarget] = qualityState
+	f.svc.repo = unavailableQualityPausePolicyRepo{f.health}
+	f.maintain()
+	f.assertActions(t, "inactive")
+	f.svc.repo = f.health
+	f.maintain()
+	f.assertActions(t, "inactive")
+	if f.health.targetActionStates["user|ws1|"+qualityActionTarget].QualitySuspended {
+		t.Fatal("quality recovery did not release only its own hold")
+	}
+}
+
 func TestChannelQualitySuspensionOffImmediatelyReleasesOnlyQualityHold(t *testing.T) {
 	for _, mode := range []string{"healthy", "no health samples", "health suspended", "health recovery pending", "policy removed", "channel pause off", "conflict"} {
 		t.Run(mode, func(t *testing.T) {

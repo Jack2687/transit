@@ -100,6 +100,25 @@ func (s *Service) qualitySuspensionBlocked(ctx context.Context, user, workspace,
 	return stored != nil && stored.QualitySuspended, nil
 }
 
+// Scheduled health specs include the channel's health-pause opt-out. Quality
+// actions use the current group policy permissions without that unrelated mask.
+// Read failures must preserve existing holds, never look like revoked permission.
+func (s *Service) currentQualityActionSpecs(ctx context.Context, user, workspace string, specs []probeModelSpec) ([]probeModelSpec, error) {
+	specs = append([]probeModelSpec(nil), specs...)
+	for i := range specs {
+		latest, err := s.repo.GetPolicy(ctx, specs[i].policy.ID, user, workspace)
+		if err != nil {
+			return nil, err
+		}
+		if latest == nil || !policySupportsProbing(*latest) {
+			specs[i].policy.Enabled = false
+		} else {
+			specs[i].policy = *latest
+		}
+	}
+	return specs, nil
+}
+
 func (s *Service) reconcileQualityTarget(ctx context.Context, user, workspace, targetID string) error {
 	release, err := s.repo.AcquireTargetLease(ctx, targetID)
 	if err != nil {
@@ -133,8 +152,9 @@ func (s *Service) reconcileQualityTarget(ctx context.Context, user, workspace, t
 	if err != nil {
 		return err
 	}
-	if !hasRemoteActionModel(job.models) {
-		return nil
+	job.models, err = s.currentQualityActionSpecs(ctx, user, workspace, job.models)
+	if err != nil {
+		return err
 	}
 	action, actionErr := s.reconcileTargetRemoteAction(ctx, user, workspace, job.session, job.target, job.models)
 	if action != "" || actionErr != nil {

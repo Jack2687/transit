@@ -876,13 +876,13 @@ export default {
       channelQualitySuspension: {
         label: 'Allow quality suspension',
         toggle: 'Allow quality suspension for channel {name}',
-        hint: 'Off by default. When enabled, the next test applies configured failure/recovery thresholds, subject to global, policy and channel suspension permissions. Turning off immediately releases the quality hold, preserving health/manual holds. Shared across groups.',
+        hint: 'Off by default. The next test applies configured failure/recovery thresholds, subject to global quality and group policy suspension permissions. Independent of the channel health suspension switch. Turning off immediately releases the quality hold, preserving health/manual holds. Shared across groups.',
         restoring: 'Quality suspension is off, but upstream restoration is incomplete. Connection failures retry automatically; check manual upstream changes if restoration remains blocked.',
       },
       channelSuspension: {
-        label: 'Allow suspension',
-        toggle: 'Allow automatic suspension of {name}',
-        hint: 'Off: no automatic suspension; probing and the priority switch are unaffected. Applies across all groups sharing this channel. System-suspended channels are restored; manual disables are preserved. On still requires policy permission.'
+        label: 'Allow health suspension',
+        toggle: 'Allow suspension of {name} after failed health probes',
+        hint: 'Controls suspension caused by failed health probes only. Turning off releases the health hold while preserving quality holds and manual disables. Probing, priority and quality suspension are independent. Shared across groups; enabling still requires policy permission.'
       },
       probeBudget: {
         exhausted: '{models} · Daily probe limit reached {used}/{limit}. Resumes {time} (UTC+8)',
@@ -986,7 +986,7 @@ export default {
         displayOnly: 'Results only. Channel status, priority and weight are unaffected.',
         autoSuspendEnabled: 'Suspend channels after quality degradation',
         actionSummary: 'Quality suspension is enabled, subject to group and channel suspension permissions.',
-        suspensionRules: 'Suspend when consecutive red results reach the failure threshold. Amber request errors do not count as degradation. Continue checks according to automatic quality settings and restore after the recovery threshold; any health suspension still holds the channel paused. Manual checks also count. Requires auto-degrade, remote actions and suspension permission in the group policy, plus channel suspension permission.',
+        suspensionRules: 'Suspend when consecutive red results reach the failure threshold. Amber request errors do not count as degradation. Continue automatic quality checks and restore after the recovery threshold; any health suspension still holds the channel paused. Manual checks also count. Requires auto-degrade, remote actions and suspension permission in the group policy, plus Allow quality suspension on the channel. Independent of the channel health suspension switch.',
         actionFailed: 'Could not update channel status after the quality check.',
         globalEnabled: 'Enable quality detection', questions: 'Question checks', schedule: 'Detection settings', model: 'Detection model', reasoningEffort: 'Reasoning effort', defaultEffort: 'Model default', mode: 'Evaluation',
         modes: { content_time: 'Content and duration', content: 'Content only', time: 'Duration only' },

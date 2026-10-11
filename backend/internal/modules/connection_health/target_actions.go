@@ -52,19 +52,28 @@ func (s *Service) reconcileTargetRemoteActionLocked(ctx context.Context, userID,
 		}
 	}
 	enabled, err := s.repo.GetChannelSuspension(ctx, userID, adminAccountID, target.TargetID)
-	if err != nil || !enabled {
+	if err != nil {
 		return "", err
 	}
-	if !targetSuspensionAllowed(specs) {
-		return "", nil
+	healthAllowed := enabled && hasRemoteActionModel(specs)
+	qualityBlocked, err := s.qualitySuspensionBlocked(ctx, userID, adminAccountID, target.TargetID, stored)
+	if err != nil {
+		return "", err
+	}
+	if qualityBlocked || (stored != nil && stored.QualitySuspended) {
+		qualitySpecs, err := s.currentQualityActionSpecs(ctx, userID, adminAccountID, specs)
+		if err != nil {
+			return "", err
+		}
+		qualityBlocked = qualityBlocked && hasRemoteActionModel(qualitySpecs)
 	}
 	controlledModels := make(map[string]struct{})
 	for _, spec := range specs {
-		if spec.policy.Enabled && policyRemoteActionEnabled(spec.policy) {
+		if healthAllowed && spec.policy.Enabled && policyRemoteActionEnabled(spec.policy) {
 			controlledModels[spec.modelName] = struct{}{}
 		}
 	}
-	if len(controlledModels) == 0 {
+	if !healthAllowed && !qualityBlocked && (stored == nil || !stored.QualitySuspended) {
 		return "", nil
 	}
 
@@ -80,10 +89,6 @@ func (s *Service) reconcileTargetRemoteActionLocked(ctx context.Context, userID,
 	}
 	statesComplete := len(states) == len(controlledModels)
 
-	qualityBlocked, err := s.qualitySuspensionBlocked(ctx, userID, adminAccountID, target.TargetID, stored)
-	if err != nil {
-		return "", err
-	}
 	allHealthy, blocked := aggregateTargetStates(states)
 	allHealthy = allHealthy && statesComplete && !qualityBlocked
 	blocked = blocked || qualityBlocked
@@ -268,7 +273,7 @@ func (s *Service) restoreUnmanagedTargetAction(ctx context.Context, policies []P
 			return
 		}
 	}
-	if enabled && hasRemoteActionModel(specs) {
+	if hasRemoteActionModel(specs) && (enabled || stored.QualitySuspended) {
 		// Reconcile former quality holds after a settings edit or a failed status write,
 		// even when no health probe is due. Keep any independent health suspension.
 		if stored.QualitySuspended {

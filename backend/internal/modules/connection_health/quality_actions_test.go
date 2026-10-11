@@ -172,8 +172,8 @@ func TestQualitySuspensionHonorsAllPermissions(t *testing.T) {
 		"remote actions off":  func(f *qualityActionFixture) { f.health.policies[0].AutoRemoteActionEnabled = false },
 		"policy pause off":    func(f *qualityActionFixture) { f.health.policies[0].AutoSuspendEnabled = false },
 		"policy disabled":     func(f *qualityActionFixture) { f.health.policies[0].Enabled = false },
-		"channel pause off": func(f *qualityActionFixture) {
-			_ = f.health.SetChannelSuspension(context.Background(), "user", "ws1", qualityActionTarget, false)
+		"channel quality pause off": func(f *qualityActionFixture) {
+			_ = f.health.SetChannelQualitySuspension(context.Background(), "user", "ws1", qualityActionTarget, false)
 		},
 		"unassigned": func(f *qualityActionFixture) { f.health.groupAssignments = nil },
 		"excluded from both groups": func(f *qualityActionFixture) {
@@ -187,18 +187,21 @@ func TestQualitySuspensionHonorsAllPermissions(t *testing.T) {
 	}
 	for name, change := range cases {
 		t.Run(name, func(t *testing.T) {
-			f := newQualityActionFixture(t)
-			change(f)
-			f.q.FailureLimit = 1
-			var err error
-			f.q, err = f.svc.SaveQualityConfiguration(context.Background(), "user", f.q)
-			if err != nil {
-				t.Fatal(err)
-			}
-			f.probe(t, "failed", true)
-			f.assertActions(t)
-			if len(f.health.targetActionStates) != 0 {
-				t.Fatal("took ownership without permission")
+			for _, healthPause := range []bool{false, true} {
+				f := newQualityActionFixture(t)
+				_ = f.health.SetChannelSuspension(context.Background(), "user", "ws1", qualityActionTarget, healthPause)
+				change(f)
+				f.q.FailureLimit = 1
+				var err error
+				f.q, err = f.svc.SaveQualityConfiguration(context.Background(), "user", f.q)
+				if err != nil {
+					t.Fatal(err)
+				}
+				f.probe(t, "failed", true)
+				f.assertActions(t)
+				if len(f.health.targetActionStates) != 0 {
+					t.Fatal("took ownership without permission")
+				}
 			}
 		})
 	}
