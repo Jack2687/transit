@@ -57,9 +57,10 @@ function keepTooltipOpen() {
 
 function scheduleHide() {
   keepTooltipOpen()
-  // Allow crossing the small gap between a history cell and its floating panel.
+  // Allow crossing from a result dot to its floating panel without making the
+  // rest of the chart a hover target.
   hideTimer = setTimeout(() => {
-    if (strip.value?.matches(':hover, :focus-within') || tooltip.value?.matches(':hover, :focus-within')) return
+    if (strip.value?.querySelector('.quality-history-point:hover') || strip.value?.matches(':focus-visible') || tooltip.value?.matches(':hover, :focus-within')) return
     hideTooltip()
   }, 250)
 }
@@ -83,19 +84,14 @@ function selectSample(index: number) {
   activeSample.value = sample
 }
 
-function selectAt(clientX: number) {
-  if (!strip.value || !history.value.length) return
-  const bounds = strip.value.getBoundingClientRect()
-  // Select the nearest result across the full chart height, including the gaps.
-  const index = Math.round((clientX - bounds.left - chartPadding) / Math.max(1, bounds.width - chartPadding * 2) * (history.value.length - 1))
-  selectSample(Math.max(0, Math.min(history.value.length - 1, index)))
-}
-
-function hoverSample(event: PointerEvent) {
-  if (event.pointerType !== 'touch') selectAt(event.clientX)
+function hoverSample(event: PointerEvent, index: number) {
+  if (event.pointerType !== 'touch') selectSample(index)
 }
 
 function focusSample() {
+  // Clicking the chart background can focus the container, but must not open
+  // details. Preserve keyboard access with Tab and the arrow keys.
+  if (!strip.value?.matches(':focus-visible')) return
   keepTooltipOpen()
   if (activeIndex.value !== null) return
   selectSample(history.value.length - 1)
@@ -142,15 +138,15 @@ onBeforeUnmount(keepTooltipOpen)
         <slot name="controls" />
         <span :title="pausedByHealth ? t(`${p}.healthPausedHint`) : undefined" :class="suspendedByQuality || (selected && enabled && !pausedByHealth && state?.degraded) ? 'text-red-600 dark:text-red-400' : status === 'normal' ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'">{{ t(`${p}.statuses.${status}`) }}</span>
       </div>
-      <span v-if="state" class="text-muted-foreground" :title="title(state.latest)">{{ state.latest.model }} · {{ (state.latest.durationMs/1000).toFixed(2) }}s</span>
+      <span v-if="state" class="text-muted-foreground">{{ state.latest.model }} · {{ (state.latest.durationMs/1000).toFixed(2) }}s</span>
     </div>
-    <div ref="strip" class="relative h-[52px] rounded-md bg-emerald-500/[0.035] outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-emerald-400/[0.04]" role="group" :tabindex="samples.length ? 0 : -1" :aria-label="t(`${p}.historyLabel`, { count:samples.length, failed, errors, rate })" :aria-describedby="activeIndex !== null ? tooltipId : undefined" @pointerenter="hoverSample" @pointermove="hoverSample" @pointerleave="scheduleHide" @pointercancel="hideTooltip" @click="selectAt($event.clientX)" @focus="focusSample" @blur="scheduleHide" @keydown="navigateSample">
+    <div ref="strip" class="relative h-[52px] rounded-md bg-emerald-500/[0.035] outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-emerald-400/[0.04]" role="group" :tabindex="samples.length ? 0 : -1" :aria-label="t(`${p}.historyLabel`, { count:samples.length, failed, errors, rate })" :aria-describedby="activeIndex !== null ? tooltipId : undefined" @pointerleave="scheduleHide" @pointercancel="hideTooltip" @focus="focusSample" @blur="scheduleHide" @keydown="navigateSample">
       <svg class="block h-full w-full overflow-hidden" :viewBox="`0 0 ${plotWidth} ${chartHeight}`" aria-hidden="true">
         <line :x1="chartPadding" :x2="plotWidth-chartPadding" y1="12" y2="12" class="stroke-emerald-500/10 dark:stroke-emerald-400/10" stroke-dasharray="2 4" />
         <line :x1="chartPadding" :x2="plotWidth-chartPadding" y1="40" y2="40" class="stroke-red-500/10 dark:stroke-red-400/10" stroke-dasharray="2 4" />
         <line v-for="segment in segments" :key="segment.to.sample.id" :x1="segment.from.x" :y1="segment.from.y" :x2="segment.to.x" :y2="segment.to.y" stroke-width="1" :class="segment.from.sample.result === 'error' || segment.to.sample.result === 'error' ? 'stroke-amber-500/35 dark:stroke-amber-400/35' : 'stroke-emerald-500/35 dark:stroke-emerald-400/35'" />
-        <circle v-for="point in points" :key="point.sample.id" :cx="point.x" :cy="point.y" :r="pointRadius" fill="currentColor" :class="[color(point.sample), 'stroke-card']" stroke-width="0.8" />
-        <circle v-if="activePoint" :cx="activePoint.x" :cy="activePoint.y" :r="pointRadius+2" fill="none" stroke="currentColor" stroke-width="1" :class="color(activePoint.sample)" />
+        <circle v-for="(point, index) in points" :key="point.sample.id" :cx="point.x" :cy="point.y" :r="pointRadius" fill="currentColor" :class="[color(point.sample), 'quality-history-point cursor-help stroke-card']" stroke-width="0.8" @pointerenter="hoverSample($event, index)" @pointerleave="scheduleHide" @click.stop="selectSample(index)" />
+        <circle v-if="activePoint" :cx="activePoint.x" :cy="activePoint.y" :r="pointRadius+2" fill="none" stroke="currentColor" stroke-width="1" :class="[color(activePoint.sample), 'pointer-events-none']" />
       </svg>
       <span v-if="!samples.length" class="pointer-events-none absolute inset-0 flex items-center justify-center text-xs text-muted-foreground">{{ t(`${p}.noRecord`) }}</span>
     </div>
