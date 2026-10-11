@@ -101,7 +101,7 @@ const state = computed(() => {
     </ProbeHistoryStrip>
     <details v-if="selectedForAutomation && priorityDecision" class="rounded-md bg-surface/40 px-2 py-1.5 text-xs">
       <summary class="flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground">
-        <span>{{ t(`${latencyPrefix}.${priorityDecision.probeMode === 'first_token' ? 'averageFirstToken' : 'average'}`) }} <strong class="font-semibold text-foreground">{{ priorityDecision.averageMs != null ? `${priorityDecision.failedSampleCount ? '≥' : ''}${(priorityDecision.averageMs / 1000).toFixed(2)}s` : '—' }}</strong></span>
+        <span>{{ t(`${latencyPrefix}.${priorityDecision.probeMode === 'first_token' ? 'averageFirstToken' : 'average'}`) }} <strong class="font-semibold text-foreground">{{ priorityDecision.averageMs != null ? `${(priorityDecision.averageMs / 1000).toFixed(2)}s` : '—' }}</strong></span>
         <span>{{ t(`${latencyPrefix}.samples`, { used: priorityDecision.sampleCount, total: priorityDecision.requiredSamples }) }}</span>
         <span v-if="priorityDecision.failedSampleCount" class="text-amber-600 dark:text-amber-400" :title="t(`${latencyPrefix}.failedSamplesHint`)">{{ t(`${latencyPrefix}.failedSamples`, { count: priorityDecision.failedSampleCount }) }}</span>
         <span v-if="account.priorityEnabled !== false">{{ t(`${latencyPrefix}.decision`, { priority: priorityDecision.priority }) }}</span>

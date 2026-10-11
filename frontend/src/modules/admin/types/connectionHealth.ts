@@ -410,6 +410,6 @@ export interface LatencyPriorityDecision {
   weights: number[]
   bandIndex: number | null
   priority: number
-  reason: 'latency' | 'insufficient' | 'degraded' | 'suspended' | 'slow_failures'
+  reason: 'latency' | 'insufficient' | 'degraded' | 'suspended'
   sharedPolicyCount: number
 }

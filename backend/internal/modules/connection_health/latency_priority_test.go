@@ -114,27 +114,78 @@ func slowFailurePolicy() Policy {
 	return p
 }
 
-func TestLatencyTimeoutsUseFinalBandWithSuspensionOff(t *testing.T) {
+func TestLatencyTimeoutsUseWeightedBandWithSuspensionOff(t *testing.T) {
 	now := time.Now()
 	p := slowFailurePolicy()
 	samples := []PriorityProbeSample{}
 	for i := 0; i < 5; i++ {
-		samples = append(samples, PriorityProbeSample{ModelName: "model", ProbeMode: ProbeModeFirstToken, Result: string(ResultNetworkFluctuation), LatencyMs: 20000, CreatedAt: now.Add(-time.Duration(i) * time.Minute)})
+		samples = append(samples, PriorityProbeSample{ModelName: "model", ProbeMode: ProbeModeFirstToken, Result: string(ResultNetworkFluctuation), LatencyMs: 20000 + i*1000, CreatedAt: now.Add(-time.Duration(i) * time.Minute)})
 	}
 	for _, health := range []State{StateHealthy, StateDegraded, StateSuspended} {
 		d := evaluateLatencyPriority(upstream.PlatformSub2API, p, []ConnectionHealthState{{ModelName: "model", State: health}}, samples, &PrioritySyncState{LastAppliedPriority: 100}, now)
-		if d.AverageMs == nil || *d.AverageMs != 20000 || d.SampleCount != 5 || d.FailedSampleCount != 5 || d.Priority != 600 || d.Reason != "slow_failures" {
+		if d.AverageMs == nil || *d.AverageMs != 20000 || d.SampleCount != 5 || d.FailedSampleCount != 5 || d.Priority != 600 || d.Reason != "latency" {
 			t.Fatalf("slow failures ignored or promoted with health=%s: %+v", health, d)
 		}
 	}
-	// Even a custom final band above the request deadline, a large band margin,
-	// or too few samples must not give an all-timeout channel a faster priority.
+	// All failures still use the weighted result and the configured sample/band
+	// rules, rather than forcing a final band that may begin above the deadline.
 	p.LatencyPriority.Bands[2].MaxSeconds = latencyFloat(30)
 	p.LatencyPriority.Bands[3].MinSeconds = 30
-	p.LatencyPriority.MinSamples, p.LatencyPriority.HysteresisSeconds = 5, 60
-	d := evaluateLatencyPriority(upstream.PlatformSub2API, p, nil, samples[:1], &PrioritySyncState{LastAppliedPriority: 10}, now)
-	if d.Priority != 600 || d.SampleCount != 1 || d.FailedSampleCount != 1 {
-		t.Fatalf("all-timeout fallback bypassed: %+v", d)
+	d := evaluateLatencyPriority(upstream.PlatformSub2API, p, nil, samples, nil, now)
+	if d.Priority != 400 || d.Reason != "latency" {
+		t.Fatalf("timeout average did not select its configured band: %+v", d)
+	}
+	p.LatencyPriority.MinSamples = 5
+	d = evaluateLatencyPriority(upstream.PlatformSub2API, p, nil, samples[:1], nil, now)
+	if d.Priority != 50 || d.Reason != "insufficient" || d.SampleCount != 1 || d.FailedSampleCount != 1 || *d.AverageMs != 20000 {
+		t.Fatalf("timeout samples bypassed minimum sample count: %+v", d)
+	}
+	p.LatencyPriority.HysteresisSeconds = 10
+	d = evaluateLatencyPriority(upstream.PlatformSub2API, p, nil, samples, &PrioritySyncState{LastAppliedPriority: 200}, now)
+	if d.Priority != 200 {
+		t.Fatalf("timeout average ignored configured band margin: %+v", d)
+	}
+}
+
+func TestLatencyFailedSamplesUseConfiguredLimitWithoutChangingHistory(t *testing.T) {
+	now := time.Now()
+	durations := []int{20000, 25000, 60000, 5000, 21000}
+	samples := make([]PriorityProbeSample, len(durations))
+	for i, ms := range durations {
+		result := string(ResultNetworkFluctuation)
+		if i == 3 {
+			result = string(ResultOK)
+		}
+		samples[i] = PriorityProbeSample{ModelName: "model", ProbeMode: ProbeModeFirstToken, Result: result, LatencyMs: ms, CreatedAt: now.Add(-time.Duration(i) * time.Minute)}
+	}
+	for _, tt := range []struct {
+		name         string
+		maxLatency   int
+		wantSample   int
+		wantAverage  float64
+		wantPriority int
+	}{
+		{"configured 20s", 20000, 20000, 17750, 600},
+		{"configured 10s", 10000, 10000, 9250, 200},
+		{"default 20s", 0, 20000, 17750, 600},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			p := slowFailurePolicy()
+			p.MaxLatencyMs = tt.maxLatency
+			d := evaluateLatencyPriority(upstream.PlatformSub2API, p, nil, samples, nil, now)
+			if d.AverageMs == nil || *d.AverageMs != tt.wantAverage || d.SampleCount != 5 || d.FailedSampleCount != 4 || d.Priority != tt.wantPriority {
+				t.Fatalf("failed samples were not weighted at the configured limit: %+v", d)
+			}
+			for i, sample := range d.Samples {
+				want := tt.wantSample
+				if i == 3 {
+					want = 5000
+				}
+				if sample.LatencyMs != want || samples[i].LatencyMs != durations[i] || sample.Result != samples[i].Result {
+					t.Fatalf("normalized display/history/result mismatch at %d: decision=%+v original=%+v", i, sample, samples[i])
+				}
+			}
+		})
 	}
 }
 
@@ -143,7 +194,7 @@ func TestLatencyMixedSuccessesAndSlowFailuresRespectWindowAndDirection(t *testin
 	p := slowFailurePolicy()
 	p.LatencyPriority.SampleCount, p.LatencyPriority.Weights = 2, []float64{3, 1}
 	samples := []PriorityProbeSample{
-		{ID: "timeout", ModelName: "model", ProbeMode: ProbeModeFirstToken, Result: "network_fluctuation", LatencyMs: 20000, CreatedAt: now},
+		{ID: "timeout", ModelName: "model", ProbeMode: ProbeModeFirstToken, Result: "network_fluctuation", LatencyMs: 25000, CreatedAt: now},
 		{ID: "success", ModelName: "model", ProbeMode: ProbeModeFirstToken, Result: "ok", LatencyMs: 5000, CreatedAt: now.Add(-time.Minute)},
 		{ID: "quick-error", ModelName: "model", ProbeMode: ProbeModeFirstToken, Result: "server_error", LatencyMs: 1043, CreatedAt: now},
 		{ID: "other-mode", ModelName: "model", ProbeMode: ProbeModeArithmetic, Result: "network_fluctuation", LatencyMs: 90000, CreatedAt: now},
@@ -185,7 +236,7 @@ func TestLatencyTimeoutPriorityWritesWithHealthPauseOff(t *testing.T) {
 	svc := &Service{repo: repo, priorityActions: actions}
 	states := []ConnectionHealthState{{ConnectionID: target, ModelName: "model", State: StateSuspended}}
 	for i := 0; i < 5; i++ {
-		repo.events = append(repo.events, ConnectionHealthEvent{ID: string(rune('a' + i)), UserID: "user1", AdminAccountID: "ws1", ConnectionID: target, PolicyID: p.ID, ModelName: "model", ProbeMode: ProbeModeFirstToken, Result: "network_fluctuation", LatencyMs: intPtr(20000), CreatedAt: time.Now().Add(-time.Duration(i) * time.Minute)})
+		repo.events = append(repo.events, ConnectionHealthEvent{ID: string(rune('a' + i)), UserID: "user1", AdminAccountID: "ws1", ConnectionID: target, PolicyID: p.ID, ModelName: "model", ProbeMode: ProbeModeFirstToken, Result: "network_fluctuation", LatencyMs: intPtr(20000 + i*1000), CreatedAt: time.Now().Add(-time.Duration(i) * time.Minute)})
 	}
 	inventory := map[string]*priorityTargetInventory{target: {target: AdminProbeTarget{AccountID: "100"}, account: upstream.AdminGroupAccountInfo{Priority: &currentPriority}, policies: []Policy{p}, currentPriority: 100}}
 	svc.syncWorkspacePriorities(ctx, upstream.Session{Platform: upstream.PlatformSub2API}, "user1", "ws1", inventory, true, states, nil)
@@ -196,7 +247,7 @@ func TestLatencyTimeoutPriorityWritesWithHealthPauseOff(t *testing.T) {
 	groups := []AdminGroupHealth{{Accounts: []AdminGroupAccount{{TargetID: target, AssignedPolicyIDs: []string{p.ID}}}}}
 	svc.attachLatencyPriorities(ctx, "user1", "ws1", upstream.PlatformSub2API, groups, []Policy{p}, states, []PrioritySyncState{stored})
 	d := groups[0].Accounts[0].LatencyPriority
-	if d == nil || d.Priority != 600 || d.FailedSampleCount != 5 {
+	if d == nil || d.Priority != 600 || d.FailedSampleCount != 5 || d.AverageMs == nil || *d.AverageMs != 20000 {
 		t.Fatalf("display disagrees with upstream decision: %+v", d)
 	}
 	_ = repo.SetChannelPriority(ctx, "user1", "ws1", target, false)

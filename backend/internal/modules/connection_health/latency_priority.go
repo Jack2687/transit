@@ -82,8 +82,8 @@ func validateLatencyPriority(c LatencyPriorityConfig) bool {
 }
 
 // Successful and deadline-length failed policy probes (automatic or manual)
-// contribute to latency decisions. Failed durations are waiting-time lower bounds,
-// never successful first-token measurements. Fast errors are excluded.
+// contribute to latency decisions. Eligible failures use the policy deadline
+// when evaluated, never a successful first-token measurement. Fast errors are excluded.
 type PriorityProbeSample struct {
 	Result    string    `json:"result"`
 	ProbeMode string    `json:"probeMode"`
@@ -143,11 +143,17 @@ func evaluateLatencyPriority(platform upstream.Platform, p Policy, states []Conn
 	c := latencyConfig(p)
 	d := LatencyPriorityDecision{ProbeMode: normalizeProbeMode(p.ProbeMode), PolicyID: p.ID, PolicyName: p.Name, ModelName: latencyPriorityModel(p), RequiredSamples: c.SampleCount, MaxAgeSeconds: c.MaxAgeSeconds, Samples: []PriorityProbeSample{}, Weights: append([]float64(nil), c.Weights...), Priority: c.InsufficientPriority, Reason: "insufficient", SharedPolicyCount: 1}
 	cutoff := now.Add(-time.Duration(c.MaxAgeSeconds) * time.Second)
+	maxLatencyMs := defaultInt(p.MaxLatencyMs, DefaultMaxLatencyMs)
 	for _, sample := range samples {
-		if sample.Result != "" && sample.Result != string(ResultOK) && (!isPriorityProbeFailure(sample.Result) || sample.LatencyMs < defaultInt(p.MaxLatencyMs, DefaultMaxLatencyMs)) {
+		if sample.Result != "" && sample.Result != string(ResultOK) && (!isPriorityProbeFailure(sample.Result) || sample.LatencyMs < maxLatencyMs) {
 			continue
 		}
 		if normalizeProbeMode(sample.ProbeMode) == normalizeProbeMode(p.ProbeMode) && sample.ModelName == d.ModelName && sample.LatencyMs >= 0 && !sample.CreatedAt.Before(cutoff) && !sample.CreatedAt.After(now) {
+			// Normalize only this decision's copy. Shared policies may have different
+			// deadlines, and probe history must retain the original elapsed duration.
+			if isPriorityProbeFailure(sample.Result) {
+				sample.LatencyMs = maxLatencyMs
+			}
 			d.Samples = append(d.Samples, sample)
 		}
 	}
@@ -203,13 +209,6 @@ func evaluateLatencyPriority(platform upstream.Platform, p Policy, states []Conn
 			d.Priority, d.Reason = c.DegradedPriority, "degraded"
 		}
 		return d
-	}
-	// No successful response within the window is evidence of a slow/unavailable
-	// channel, not missing data. Do not let min-samples or hysteresis promote it.
-	if d.FailedSampleCount > 0 && (d.FailedSampleCount == d.SampleCount || d.SampleCount < c.MinSamples) {
-		index := len(c.Bands) - 1
-		d.BandIndex, d.Priority, d.Reason = &index, c.Bands[index].Priority, "slow_failures"
-		return degradedFloor()
 	}
 	// Partial samples are visible but do not grant an unproven channel a fast tier.
 	if d.SampleCount < c.MinSamples {

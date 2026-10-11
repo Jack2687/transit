@@ -897,7 +897,7 @@ export default {
   "maxAge": "Sample validity (seconds)",
   "minSamples": "Minimum samples",
   "hysteresis": "Band margin (seconds)",
-  "windowHelp": "Defaults: 5 eligible samples within 300 seconds, weighted 30/25/20/15/10 from newest to oldest. Successes and failures reaching the maximum latency use elapsed time; fast errors are excluded. Partial weights are normalized. All slow failures, or slow failures below the minimum sample count, use the final band. Other insufficient data uses its configured priority. Set the band margin to 0 to disable it.",
+  "windowHelp": "Defaults: 5 eligible samples within 300 seconds, weighted 30/25/20/15/10 from newest to oldest. Successes use elapsed time. Failures reaching the maximum latency use the configured maximum (e.g. a 25-second failure counts as 20 seconds with a 20-second limit). Fast errors are excluded. Bands use the weighted result. Partial weights are normalized; fewer than the minimum samples uses its configured priority. Set the band margin to 0 to disable it.",
   "weights": "Weights, newest to oldest (normalized automatically)",
   "weightItem": "Sample {n}",
   "bandsHelp": "Contiguous ranges must start at 0, with no overlaps. The boundary belongs to the preceding band; leave the final upper bound empty. Lower numbers are preferred by Sub2API; NewAPI prefers higher numbers.",
@@ -914,8 +914,8 @@ export default {
   "average": "Weighted latency",
   "samples": "{used}/{total} samples",
   "failedSamples": "{count} failed",
-  "failedSample": "Slow failure",
-  "failedSamplesHint": "Failed samples contribute elapsed waiting time, not a successful first token or response. The weighted value is therefore a lower bound. These probes remain failures and do not increase success counts.",
+  "failedSample": "Failed · counted at latency limit",
+  "failedSamplesHint": "Failures reaching the maximum latency contribute the policy's configured maximum latency; successes use elapsed time. These probes remain failures and do not increase success counts.",
   "decision": "Calculated priority {priority}",
   "details": "Calculation details",
   "modelLine": "Model: {model} · Validity: {seconds}s",
@@ -924,7 +924,6 @@ export default {
   "sampleLine": "{time} · {seconds}s · Weight {weight}%",
   "reasons": {
     "latency": "Latency band {n}",
-    "slow_failures": "All eligible samples failed slowly, or slow failures exist below the minimum sample count: using the final band",
     "insufficient": "Insufficient fresh samples",
     "degraded": "Failure threshold reached",
     "suspended": "Suspended / disabled"

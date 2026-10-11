@@ -196,7 +196,7 @@ func TestLatencyPriorityPostgresSlowFailuresAndSharedDeadlines(t *testing.T) {
 	}
 	p.MaxLatencyMs = 5000
 	d = evaluateLatencyPriority(upstream.PlatformSub2API, p, nil, samples, nil, now)
-	if d.SampleCount != 5 || d.FailedSampleCount != 5 || *d.AverageMs != 8000 || d.Priority != 600 {
+	if d.SampleCount != 5 || d.FailedSampleCount != 5 || *d.AverageMs != 5000 || d.Priority != 10 {
 		t.Fatalf("custom deadline was not used: %+v", d)
 	}
 	defaults, err := repo.ListPriorityProbeSamples(ctx, "user1", "ws1", []string{"target"}, now.Add(-300*time.Second))
