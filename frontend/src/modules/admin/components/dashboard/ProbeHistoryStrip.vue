@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { formatConnectionHealthTime } from '../../composables/useConnectionHealth'
 import type { GroupProbeSample } from '../../types/connectionHealth'
 
-const props = withDefaults(defineProps<{ samples?: GroupProbeSample[]; unavailable?: boolean; limit?: number; compact?: boolean }>(), { limit: 100 })
+const props = withDefaults(defineProps<{ samples?: GroupProbeSample[]; unavailable?: boolean; limit?: number; compact?: boolean }>(), { limit: 60 })
 const { t } = useI18n()
 const prefix = 'admin.connectionHealth.cards'
 const samples = computed(() => [...(props.samples ?? [])]

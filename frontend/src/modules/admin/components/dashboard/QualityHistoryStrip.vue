@@ -7,7 +7,7 @@ import type { QualitySample, QualityState } from '../../types/quality'
 const props = defineProps<{ samples?: QualitySample[]; state?: QualityState; enabled?: boolean; pausedByHealth?: boolean; suspendedByQuality?: boolean; selected?: boolean; unavailable?: boolean }>()
 const { t, te } = useI18n()
 const p = 'admin.connectionHealth.quality'
-const samples = computed(() => [...(props.samples || [])].sort((a,b) => Date.parse(b.createdAt)-Date.parse(a.createdAt) || b.id.localeCompare(a.id)).slice(0,100))
+const samples = computed(() => [...(props.samples || [])].sort((a,b) => Date.parse(b.createdAt)-Date.parse(a.createdAt) || b.id.localeCompare(a.id)).slice(0,60))
 const history = computed(() => samples.value.slice().reverse())
 const passed = computed(() => samples.value.filter(s => s.result === 'passed').length)
 const failed = computed(() => samples.value.filter(s => s.result === 'failed').length)

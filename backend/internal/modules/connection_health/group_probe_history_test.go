@@ -30,7 +30,7 @@ func TestGroupProbeHistoryKeepsQuietAndSharedTargetsWithoutLeakingWorkspaceEvent
 	} {
 		repo.events = append(repo.events, event)
 	}
-	for i := 0; i < 25; i++ {
+	for i := 0; i < 80; i++ {
 		repo.events = append(repo.events, ConnectionHealthEvent{ID: fmt.Sprintf("group-%02d", i), ConnectionID: groupProbeTargetID("workspace", "busy-group"), UserID: "user", AdminAccountID: "workspace", Result: string(ResultRateLimited), CreatedAt: now.Add(time.Duration(i) * time.Minute)})
 	}
 	groups := []AdminGroupHealth{
@@ -43,15 +43,15 @@ func TestGroupProbeHistoryKeepsQuietAndSharedTargetsWithoutLeakingWorkspaceEvent
 	svc.attachGroupProbeHistory(context.Background(), "user", "workspace", groups)
 	for _, index := range []int{0, 2} {
 		probes := groups[index].Accounts[0].RecentProbes
-		if len(probes) != 100 || probes[0].ID != "busy-139" || probes[99].ID != "busy-040" {
-			t.Fatalf("group %s has incorrect latest 100 probes: %+v", groups[index].ID, probes)
+		if len(probes) != 60 || probes[0].ID != "busy-139" || probes[59].ID != "busy-080" {
+			t.Fatalf("group %s has incorrect latest 60 probes: %+v", groups[index].ID, probes)
 		}
 	}
 	if probes := groups[1].Accounts[0].RecentProbes; len(probes) != 1 || probes[0].ID != "quiet" {
 		t.Fatalf("quiet target history was lost or polluted: %+v", probes)
 	}
-	if probes := groups[0].RecentProbes; len(probes) != 20 || probes[0].ID != "group-24" || probes[19].ID != "group-05" {
-		t.Fatalf("group must keep only its own latest 20 gateway probes: %+v", probes)
+	if probes := groups[0].RecentProbes; len(probes) != 60 || probes[0].ID != "group-79" || probes[59].ID != "group-20" {
+		t.Fatalf("group must keep only its own latest 60 gateway probes: %+v", probes)
 	}
 	for _, index := range []int{1, 2} {
 		if len(groups[index].RecentProbes) != 0 {
@@ -143,7 +143,7 @@ func TestRecentProbesByTargetsPostgres(t *testing.T) {
 			t.Fatalf("unrequested target leaked: %+v", sample)
 		}
 	}
-	if busy != 100 || quiet != 1 {
+	if busy != 60 || quiet != 1 {
 		t.Fatalf("per-target history counts: busy=%d quiet=%d", busy, quiet)
 	}
 }

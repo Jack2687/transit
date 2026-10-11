@@ -178,7 +178,7 @@ func (s *Service) attachQuality(ctx context.Context, user, workspace string, gro
 			}
 		}
 	}
-	history, err := s.qualityRepo.ListQualityHistory(ctx, user, workspace, targets, min(q.HistoryLimit, 100))
+	history, err := s.qualityRepo.ListQualityHistory(ctx, user, workspace, targets, min(q.HistoryLimit, monitorHistoryLimit))
 	if err != nil {
 		s.qualityUnavailable(groups)
 		return

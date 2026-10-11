@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-const groupProbeHistoryLimit = 100
+const monitorHistoryLimit = 60
 
 // GroupProbeSample contains only the fields needed for a group's probe timeline.
 type GroupProbeSample struct {
@@ -59,16 +59,16 @@ func (s *Service) attachGroupProbeHistory(ctx context.Context, userID, adminAcco
 			sort.Slice(account.RecentProbes, func(a, b int) bool {
 				return account.RecentProbes[a].CreatedAt.After(account.RecentProbes[b].CreatedAt)
 			})
-			if len(account.RecentProbes) > groupProbeHistoryLimit {
-				account.RecentProbes = account.RecentProbes[:groupProbeHistoryLimit]
+			if len(account.RecentProbes) > monitorHistoryLimit {
+				account.RecentProbes = account.RecentProbes[:monitorHistoryLimit]
 			}
 		}
 		group.RecentProbes = append([]GroupProbeSample{}, byTarget[groupProbeTargetID(adminAccountID, group.ID)]...)
 		sort.Slice(group.RecentProbes, func(a, b int) bool {
 			return group.RecentProbes[a].CreatedAt.After(group.RecentProbes[b].CreatedAt)
 		})
-		if len(group.RecentProbes) > 20 {
-			group.RecentProbes = group.RecentProbes[:20]
+		if len(group.RecentProbes) > monitorHistoryLimit {
+			group.RecentProbes = group.RecentProbes[:monitorHistoryLimit]
 		}
 	}
 }
@@ -89,7 +89,7 @@ func (r *Repository) ListRecentProbesByTargets(ctx context.Context, userID, admi
 				AND connection_id = target.target_id AND result = ANY($4::text[])
 			ORDER BY created_at DESC, id DESC LIMIT $5
 		) AS event
-	`, userID, adminAccountID, targetIDs, probeResultKeys(), groupProbeHistoryLimit)
+	`, userID, adminAccountID, targetIDs, probeResultKeys(), monitorHistoryLimit)
 	if err != nil {
 		return nil, err
 	}
