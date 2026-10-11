@@ -544,7 +544,7 @@ const handleDeletePolicy = async (policy: ConnectionHealthPolicy) => {
                 </button>
                 <button type="button" :disabled="group.groupProbeSupported === false" class="rounded-md p-1.5 text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:opacity-30" :aria-label="t('admin.connectionHealth.groupProbe.action', { name: group.name })" :title="t(group.groupProbeSupported === false ? 'admin.connectionHealth.groupProbe.unsupported' : 'admin.connectionHealth.groupProbe.buttonHint')" @click="openGroupProbe(group)"><Zap class="h-4 w-4" /></button>
               </div>
-              <ProbeHistoryStrip class="mt-2.5" :samples="group.recentProbes" compact :unavailable="Boolean(group.probeHistoryError)" />
+              <ProbeHistoryStrip class="mt-2.5" :samples="group.recentProbes" :limit="20" compact :unavailable="Boolean(group.probeHistoryError)" />
               <GroupAutomationControl
                 :group-name="group.name"
                 :policies="groupPolicies.get(group.id) ?? []"
