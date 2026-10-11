@@ -890,14 +890,14 @@ export default {
       },
       latencyPriority: {
         averageFirstToken: 'Weighted first token',
-  "help": "Only updates upstream priority. Average recent successful policy probes (including manual probes) of one selected model.",
+  "help": "Only updates upstream priority. Average successful probes and failures lasting at least the maximum latency, including manual policy probes, for one selected model. Independent of health suspension permission.",
   "model": "Model for latency ranking",
   "firstModel": "First enabled model (alphabetical)",
   "sampleCount": "Sample count",
   "maxAge": "Sample validity (seconds)",
   "minSamples": "Minimum samples",
   "hysteresis": "Band margin (seconds)",
-  "windowHelp": "Defaults for 60-second probes: 5 successful samples within 300 seconds (5 minutes), weighted 30/25/20/15/10 from newest to oldest. Available weights are normalized when fewer samples exist; below the minimum uses the insufficient-data priority. Set the band margin to 0 to disable it.",
+  "windowHelp": "Defaults: 5 eligible samples within 300 seconds, weighted 30/25/20/15/10 from newest to oldest. Successes and failures reaching the maximum latency use elapsed time; fast errors are excluded. Partial weights are normalized. All slow failures, or slow failures below the minimum sample count, use the final band. Other insufficient data uses its configured priority. Set the band margin to 0 to disable it.",
   "weights": "Weights, newest to oldest (normalized automatically)",
   "weightItem": "Sample {n}",
   "bandsHelp": "Contiguous ranges must start at 0, with no overlaps. The boundary belongs to the preceding band; leave the final upper bound empty. Lower numbers are preferred by Sub2API; NewAPI prefers higher numbers.",
@@ -910,9 +910,12 @@ export default {
   "insufficientPriority": "Insufficient data",
   "degradedPriority": "Degraded priority",
   "suspendedPriority": "Suspended / disabled",
-  "sharedHelp": "A shared account has one upstream priority. The least preferred result wins across active latency policies. Health transitions still follow failure/recovery thresholds.",
+  "sharedHelp": "A shared account has one upstream priority. The least preferred result wins across active latency policies. After the failure threshold, use the less preferred of the latency band and degraded priority; degradation cannot improve scheduling preference.",
   "average": "Weighted latency",
-  "samples": "{used}/{total} successes",
+  "samples": "{used}/{total} samples",
+  "failedSamples": "{count} failed",
+  "failedSample": "Slow failure",
+  "failedSamplesHint": "Failed samples contribute elapsed waiting time, not a successful first token or response. The weighted value is therefore a lower bound. These probes remain failures and do not increase success counts.",
   "decision": "Calculated priority {priority}",
   "details": "Calculation details",
   "modelLine": "Model: {model} · Validity: {seconds}s",
@@ -921,6 +924,7 @@ export default {
   "sampleLine": "{time} · {seconds}s · Weight {weight}%",
   "reasons": {
     "latency": "Latency band {n}",
+    "slow_failures": "All eligible samples failed slowly, or slow failures exist below the minimum sample count: using the final band",
     "insufficient": "Insufficient fresh samples",
     "degraded": "Failure threshold reached",
     "suspended": "Suspended / disabled"
@@ -1219,7 +1223,7 @@ export default {
           options: {
             multiplier: {
               title: 'Latency Priority',
-              description: 'Map the weighted latency of the latest 5 successful probes within 300 seconds to configured upstream priorities.'
+              description: 'Map the weighted latency of the latest 5 eligible probes (including slow failures) within 300 seconds to configured upstream priorities.'
             },
             multiplierOnly: {
               title: 'Multiplier Only',
@@ -1265,7 +1269,7 @@ export default {
           remoteAction: 'Upstream Automation',
           enabled: 'Enabled',
           disabled: 'Disabled',
-          multiplierRule: 'Latency rule: use the latest 5 successful probes within 300 seconds with weights 30/25/20/15/10, then map the average to a configured priority. Shared channels use the least preferred result. Failure and recovery thresholds still apply; manual priority edits stop automatic overwrites.',
+          multiplierRule: 'Latency rule: use the latest 5 eligible probes (including slow failures) within 300 seconds with weights 30/25/20/15/10, then map the average to a configured priority. Shared channels use the least preferred result. Failure and recovery thresholds still apply; manual priority edits stop automatic overwrites.',
           multiplierOnlyRule: 'Multiplier-only rule: health state is ignored and no model probes run. Targets in multiple groups use the lowest multiplier. Disabling or unbinding restores the original priority; manual edits remain protected by conflict detection.'
         },
         back: 'Back',
@@ -1506,7 +1510,7 @@ export default {
           none: 'Keep Upstream Values',
           multiplier: 'Sort by Group Multiplier'
         },
-        priorityModeHelp: 'Latency sorting maps recent successful probes to configurable priorities. Multiplier sorting retains the existing rules. Failure and recovery thresholds still apply.',
+        priorityModeHelp: 'Latency sorting maps recent successful probes and slow failures to configurable priorities. Multiplier sorting retains the existing rules. Failure and recovery thresholds still apply.',
         multiplierOnlySummaryTitle: 'Lower Multiplier, Higher Priority',
         multiplierOnlySummary: 'About every 30 seconds, the scheduler reads current group multipliers and syncs upstream priority. It never resolves probe credentials, requests models, consumes probe budget, degrades health, or runs remote health actions. Manual priority edits stop automatic overwrites.',
         providerLabel: 'Model Provider',
@@ -1525,7 +1529,7 @@ export default {
           autoDegrade: 'Update health at the consecutive failure and success thresholds. With suspension disabled, health only affects priority. Disabling Auto Degrade only records results.',
           autoRemoteAction: 'Auto Degrade, Auto Remote Action and Allow Channel Suspension must all be enabled to change Sub2API account status or NewAPI channel status/weight. Upstream priority has its own setting.',
           autoSuspend: 'Allow local suspension at the consecutive failure threshold. Upstream suspension also requires Auto Degrade and Auto Remote Action. When off, only health and priority change; system-disabled channels return to their original state while manually disabled channels are preserved.',
-          priorityMode: 'Latency mode uses recent successful probes, weights and configured bands. Multiplier mode retains the existing rules. Manual priority edits stop automatic overwrites.'
+          priorityMode: 'Latency mode uses recent successful probes and slow failures, weights and configured bands. Multiplier mode retains the existing rules. Manual priority edits stop automatic overwrites.'
         },
         runFlow: {
           buttonLabel: 'How it works',

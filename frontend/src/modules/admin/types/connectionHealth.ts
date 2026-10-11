@@ -404,11 +404,12 @@ export interface LatencyPriorityDecision {
   averageMs: number | null
   sampleCount: number
   requiredSamples: number
+  failedSampleCount?: number
   maxAgeSeconds: number
-  samples: { id: string; latencyMs: number; createdAt: string }[]
+  samples: { id: string; result?: string; latencyMs: number; createdAt: string }[]
   weights: number[]
   bandIndex: number | null
   priority: number
-  reason: 'latency' | 'insufficient' | 'degraded' | 'suspended'
+  reason: 'latency' | 'insufficient' | 'degraded' | 'suspended' | 'slow_failures'
   sharedPolicyCount: number
 }

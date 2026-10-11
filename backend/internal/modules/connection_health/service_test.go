@@ -1023,15 +1023,22 @@ func TestProbeConnection_CannotProbeConnectionFromOtherWorkspace(t *testing.T) {
 	}
 }
 
-func (f *fakeRepository) ListPriorityProbeSamples(ctx context.Context, userID, adminAccountID string, targetIDs []string, since time.Time) ([]PriorityProbeSample, error) {
+func (f *fakeRepository) ListPriorityProbeSamples(ctx context.Context, userID, adminAccountID string, targetIDs []string, since time.Time, failureLatencyLimits ...int) ([]PriorityProbeSample, error) {
+	if len(failureLatencyLimits) == 0 {
+		failureLatencyLimits = []int{DefaultMaxLatencyMs}
+	}
 	allowed := map[string]bool{}
 	for _, id := range targetIDs {
 		allowed[id] = true
 	}
 	out := []PriorityProbeSample{}
 	for _, e := range f.events {
-		if allowed[e.ConnectionID] && e.UserID == userID && e.AdminAccountID == adminAccountID && e.Result == "ok" && e.PolicyID != "" && e.LatencyMs != nil && *e.LatencyMs >= 0 && !e.CreatedAt.Before(since) {
-			out = append(out, PriorityProbeSample{ProbeMode: e.ProbeMode, ID: e.ID, TargetID: e.ConnectionID, ModelName: e.ModelName, LatencyMs: *e.LatencyMs, CreatedAt: e.CreatedAt})
+		eligible := e.Result == "ok"
+		for _, limit := range failureLatencyLimits {
+			eligible = eligible || (isPriorityProbeFailure(e.Result) && e.LatencyMs != nil && *e.LatencyMs >= limit)
+		}
+		if allowed[e.ConnectionID] && e.UserID == userID && e.AdminAccountID == adminAccountID && eligible && e.PolicyID != "" && e.LatencyMs != nil && *e.LatencyMs >= 0 && !e.CreatedAt.Before(since) {
+			out = append(out, PriorityProbeSample{Result: e.Result, ProbeMode: e.ProbeMode, ID: e.ID, TargetID: e.ConnectionID, ModelName: e.ModelName, LatencyMs: *e.LatencyMs, CreatedAt: e.CreatedAt})
 		}
 	}
 	return out, nil

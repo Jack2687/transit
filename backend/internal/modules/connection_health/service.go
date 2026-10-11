@@ -45,7 +45,7 @@ type healthRepository interface {
 	ListEventsByConnection(ctx context.Context, connectionID string, userID string, adminAccountID string, limit int) ([]ConnectionHealthEvent, error)
 	ListRecentEventsByWorkspace(ctx context.Context, userID string, adminAccountID string, limit int) ([]ConnectionHealthEvent, error)
 	ListRecentProbesByTargets(ctx context.Context, userID string, adminAccountID string, targetIDs []string) ([]GroupProbeSample, error)
-	ListPriorityProbeSamples(ctx context.Context, userID, adminAccountID string, targetIDs []string, since time.Time) ([]PriorityProbeSample, error)
+	ListPriorityProbeSamples(ctx context.Context, userID, adminAccountID string, targetIDs []string, since time.Time, failureLatencyLimits ...int) ([]PriorityProbeSample, error)
 	CountFailureEventsSince(ctx context.Context, userID string, adminAccountID string, since time.Time) (int, error)
 	ListProbeBudgetUsage(ctx context.Context, userID, adminAccountID string, dayStart time.Time) ([]ProbeBudgetUsage, error)
 	CountProbesToday(ctx context.Context, userID string, adminAccountID string, policyID string, targetID string, dayStart time.Time) (int, error)

@@ -7,7 +7,9 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
 	"time"
+	"transithub/backend/internal/modules/upstream"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -109,7 +111,7 @@ func TestLatencyPriorityPostgresPersistenceAndSamples(t *testing.T) {
 	if len(samples) != 2 {
 		t.Fatalf("incorrect scope/result/time filtering: %+v", samples)
 	}
-	d := evaluateLatencyPriority(p, nil, samples, nil, now)
+	d := evaluateLatencyPriority(upstream.PlatformSub2API, p, nil, samples, nil, now)
 	if d.SampleCount != 1 || *d.AverageMs != 7000 || d.Priority != 21 {
 		t.Fatalf("database-backed decision: %+v", d)
 	}
@@ -139,7 +141,7 @@ func TestLatencyPriorityPostgresPersistenceAndSamples(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d = evaluateLatencyPriority(p, nil, samples, nil, time.Now())
+	d = evaluateLatencyPriority(upstream.PlatformSub2API, p, nil, samples, nil, time.Now())
 	if d.SampleCount != 1 || d.AverageMs == nil || *d.AverageMs != 1234 {
 		t.Fatalf("probe methods mixed/starved: %+v", d)
 	}
@@ -150,5 +152,55 @@ func TestLatencyPriorityPostgresPersistenceAndSamples(t *testing.T) {
 	events, err := repo.ListEventsByConnection(ctx, target, "user1", "ws1", 100)
 	if err != nil || events[0].ProbeMode != ProbeModeArithmetic {
 		t.Fatalf("event details lost method: %v", err)
+	}
+}
+
+func TestLatencyPriorityPostgresSlowFailuresAndSharedDeadlines(t *testing.T) {
+	ctx, pool := qualityTestPool(t)
+	if _, err := pool.Exec(ctx, `CREATE TEMP TABLE connection_health_events (
+		id text, connection_id text, model_name text, result text, latency_ms int, probe_mode text,
+		created_at timestamptz, user_id text, admin_account_id text, policy_id text
+	)`); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	if _, err := pool.Exec(ctx, `INSERT INTO connection_health_events VALUES
+		('slow', 'target', 'model', 'network_fluctuation', 20000, 'first_token', $1::timestamptz - interval '40 seconds', 'user1', 'ws1', 'p1'),
+		('success', 'target', 'model', 'ok', 5000, 'first_token', $1::timestamptz - interval '50 seconds', 'user1', 'ws1', 'p1'),
+		('expired', 'target', 'model', 'network_fluctuation', 90000, 'first_token', $1::timestamptz - interval '301 seconds', 'user1', 'ws1', 'p1'),
+		('unmanaged', 'target', 'model', 'network_fluctuation', 90000, 'first_token', $1, 'user1', 'ws1', ''),
+		('admin-action', 'target', 'model', 'manual_restore', 90000, 'first_token', $1, 'user1', 'ws1', 'p1'),
+		('other-user', 'target', 'model', 'network_fluctuation', 90000, 'first_token', $1, 'other', 'ws1', 'p1'),
+		('other-workspace', 'target', 'model', 'network_fluctuation', 90000, 'first_token', $1, 'user1', 'other', 'p1')`, now); err != nil {
+		t.Fatal(err)
+	}
+	for _, ms := range []int{1043, 8000} {
+		if _, err := pool.Exec(ctx, `INSERT INTO connection_health_events
+			SELECT $1::text || '-' || n, 'target', 'model', 'network_fluctuation', $2, 'first_token',
+			$3::timestamptz - n * interval '1 second', 'user1', 'ws1', 'p1' FROM generate_series(1,30) n`, fmt.Sprint(ms), ms, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	repo := NewRepository(pool)
+	samples, err := repo.ListPriorityProbeSamples(ctx, "user1", "ws1", []string{"target"}, now.Add(-300*time.Second), 5000, 20000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(samples) != 22 {
+		t.Fatalf("scope filtering or per-deadline sample window incorrect: %+v", samples)
+	}
+	p := slowFailurePolicy()
+	d := evaluateLatencyPriority(upstream.PlatformSub2API, p, nil, samples, nil, now)
+	if d.SampleCount != 2 || d.FailedSampleCount != 1 || d.Samples[0].ID != "slow" || d.Samples[1].ID != "success" {
+		t.Fatalf("quick/lower-deadline errors crowded out eligible samples: %+v", d)
+	}
+	p.MaxLatencyMs = 5000
+	d = evaluateLatencyPriority(upstream.PlatformSub2API, p, nil, samples, nil, now)
+	if d.SampleCount != 5 || d.FailedSampleCount != 5 || *d.AverageMs != 8000 || d.Priority != 600 {
+		t.Fatalf("custom deadline was not used: %+v", d)
+	}
+	defaults, err := repo.ListPriorityProbeSamples(ctx, "user1", "ws1", []string{"target"}, now.Add(-300*time.Second))
+	if err != nil || len(defaults) != 2 {
+		t.Fatalf("default deadline did not include only eligible probes: %+v %v", defaults, err)
 	}
 }
