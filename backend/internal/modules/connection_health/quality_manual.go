@@ -39,9 +39,7 @@ func (s *Service) ProbeChannelQuality(ctx context.Context, user, targetID, group
 		q.DetectionMethod = qualityMethodManxue
 		q.ManxueBenchmark = strings.TrimPrefix(method, "manxue_")
 		// Keep one-off requests within the API's supported options for each benchmark.
-		if q.ManxueBenchmark == "candy" {
-			q.ManxueProtocol = "responses"
-		} else if q.ReasoningEffort == "xhigh" || q.ReasoningEffort == "max" || q.ReasoningEffort == "ultra" {
+		if q.ManxueBenchmark == "pelican" && (q.ReasoningEffort == "xhigh" || q.ReasoningEffort == "max" || q.ReasoningEffort == "ultra") {
 			q.ReasoningEffort = "high"
 		}
 	default:

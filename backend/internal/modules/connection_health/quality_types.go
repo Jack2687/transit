@@ -26,7 +26,7 @@ type QualitySettings struct {
 	AutoSuspendEnabled bool              `json:"autoSuspendEnabled"`
 	DetectionMethod    string            `json:"detectionMethod"`
 	ManxueBenchmark    string            `json:"manxueBenchmark"`
-	ManxueProtocol     string            `json:"manxueProtocol"`
+	ManxueProtocol     string            `json:"manxueProtocol"` // Legacy setting; no longer sent to Manxue.
 	ManxueServiceTier  string            `json:"manxueServiceTier"`
 	Enabled            bool              `json:"enabled"`
 	Revision           string            `json:"revision"`
@@ -82,7 +82,7 @@ func (q *QualitySettings) validate() error {
 	if q.DetectionMethod != qualityMethodQuestions && q.DetectionMethod != qualityMethodManxue {
 		return requestError(qualityPrefix + "invalidConfig")
 	}
-	if q.ManxueBenchmark != "candy" && q.ManxueBenchmark != "pelican" || q.ManxueProtocol != "responses" && q.ManxueProtocol != "chat_completions" || q.ManxueServiceTier != "" && q.ManxueServiceTier != "priority" && q.ManxueServiceTier != "ultrafast" {
+	if q.ManxueBenchmark != "candy" && q.ManxueBenchmark != "pelican" || q.ManxueServiceTier != "" && q.ManxueServiceTier != "priority" && q.ManxueServiceTier != "ultrafast" {
 		return requestError(qualityPrefix + "manxueInvalidConfig")
 	}
 	q.Model = strings.TrimSpace(q.Model)
@@ -98,7 +98,7 @@ func (q *QualitySettings) validate() error {
 	maxTimeout := 300
 	if q.DetectionMethod == qualityMethodManxue {
 		maxTimeout = 600
-		if q.ManxueBenchmark == "candy" && q.ManxueProtocol != "responses" || q.ManxueBenchmark == "pelican" && (q.ReasoningEffort == "xhigh" || q.ReasoningEffort == "max" || q.ReasoningEffort == "ultra") {
+		if q.ManxueBenchmark == "pelican" && (q.ReasoningEffort == "xhigh" || q.ReasoningEffort == "max" || q.ReasoningEffort == "ultra") {
 			return requestError(qualityPrefix + "manxueInvalidConfig")
 		}
 	}
@@ -151,6 +151,8 @@ type QualityChannel struct {
 }
 
 type QualitySample struct {
+	InputTokens     *int64     `json:"inputTokens,omitempty"`
+	OutputTokens    *int64     `json:"outputTokens,omitempty"`
 	Manual          bool       `json:"manual,omitempty"`
 	StartedAt       *time.Time `json:"startedAt,omitempty"`
 	Prompt          string     `json:"prompt,omitempty"`

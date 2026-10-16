@@ -149,6 +149,11 @@ useEventListener(document, 'keydown', event => {
                 <div class="flex flex-wrap items-center gap-2 text-xs"><span class="rounded-md border border-primary/40 bg-primary/5 px-2 py-1 text-primary">{{ detail.model }}</span><span class="rounded-md bg-surface px-2 py-1">{{ methodName(detail) }}</span><strong :class="resultClass(detail)">{{ resultName(detail) }}</strong><span class="text-muted-foreground">{{ t(`${d}.duration`) }} {{ (detail.durationMs / 1000).toFixed(2) }}s</span></div>
               </div>
               <p v-if="detail.errorKey" role="status" class="rounded-lg bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">{{ t(connectionHealthMessageKey(detail.errorKey, te)) }}</p>
+              <section v-if="qualitySampleMethod(detail) === 'manxue_candy'" class="rounded-lg bg-surface/50 p-3 text-xs">
+                <h3 class="mb-2 font-medium text-muted-foreground">{{ t(`${d}.tokenUsage`) }}</h3>
+                <p class="flex flex-wrap gap-x-5 gap-y-1"><span>{{ t(`${d}.inputTokens`) }}: {{ detail.inputTokens != null ? detail.inputTokens.toLocaleString(locale) : t(`${d}.usageUnavailable`) }}</span><span>{{ t(`${d}.outputTokens`) }}: {{ detail.outputTokens != null ? detail.outputTokens.toLocaleString(locale) : t(`${d}.usageUnavailable`) }}</span></p>
+                <p class="mt-2 text-muted-foreground">{{ t(`${d}.usageHint`) }}</p>
+              </section>
               <section v-if="detail.report" class="rounded-lg bg-surface/50 p-3"><h3 class="mb-2 text-xs font-medium text-muted-foreground">{{ t(`${d}.assessment`) }}</h3><p class="whitespace-pre-wrap break-words text-sm">{{ detail.report }}</p></section>
               <template v-if="pelican">
                 <div v-if="detail.html" class="space-y-3">

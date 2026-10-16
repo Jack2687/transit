@@ -106,7 +106,7 @@ func TestQualityPersistsPromptStartTimeAndPelicanHTML(t *testing.T) {
 		t.Fatal(err)
 	}
 	artwork, err := svc.QualityHistoryDetail(ctx, "user", target, summary.ID)
-	if err != nil || !summary.HasHTML || summary.HTML != "" || artwork.HTML == "" || strings.Contains(artwork.HTML, "secret") || strings.Contains(artwork.HTML, "private-task-id") {
+	if err != nil || !summary.HasHTML || summary.HTML != "" || artwork.HTML == "" || artwork.Model != manxuePelicanModel || strings.Contains(artwork.HTML, "secret") || strings.Contains(artwork.HTML, "private-task-id") {
 		t.Fatal("artwork not saved privately or summary too large")
 	}
 	states, _ := repo.ListQualityStates(ctx, "user", "ws1")
@@ -120,6 +120,37 @@ func TestQualityPersistsPromptStartTimeAndPelicanHTML(t *testing.T) {
 	artwork, _ = svc.QualityHistoryDetail(ctx, "user", target, summary.ID)
 	if artwork.HTML == "" {
 		t.Fatal("config change removed historical artwork")
+	}
+}
+
+func TestManualCandyUsageIsSavedInHistoryAndState(t *testing.T) {
+	svc, repo, _, _ := qualityTestService(t)
+	enableManualQuality(t, svc)
+	svc.qualityRunner = manxueTestRunner(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			w.WriteHeader(http.StatusAccepted)
+			fmt.Fprint(w, `{"id":"private-task-id","benchmark":"candy","status":"running"}`)
+		} else {
+			fmt.Fprint(w, `{"id":"private-task-id","benchmark":"candy","status":"succeeded","usage_reported":true,"candy":{"status":"passed","duration_ms":12000,"input_tokens":4300,"output_tokens":1000}}`)
+		}
+	})
+	reader := svc.platformGroups.(fakePlatformGroupReader)
+	reader.credByAccount["a"] = upstream.ProbeCredential{BaseURL: "https://gateway.example", Key: "secret"}
+	svc.platformGroups = reader
+	ctx := context.Background()
+	summary, err := svc.ProbeChannelQuality(ctx, "user", "sub2api:ws1:a", "one", "manxue_candy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	detail, err := svc.QualityHistoryDetail(ctx, "user", "sub2api:ws1:a", summary.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	states, _ := repo.ListQualityStates(ctx, "user", "ws1")
+	for _, sample := range []QualitySample{summary, detail, states[0].Latest} {
+		if sample.InputTokens == nil || *sample.InputTokens != 4300 || sample.OutputTokens == nil || *sample.OutputTokens != 1000 || sample.Result != "passed" {
+			t.Fatalf("saved API usage missing: %+v", sample)
+		}
 	}
 }
 

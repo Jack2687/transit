@@ -58,7 +58,11 @@ func TestManxueTaskVerdictsAndRequestContract(t *testing.T) {
 					if json.NewDecoder(r.Body).Decode(&input) != nil {
 						t.Error("invalid body")
 					}
-					if input["base_url"] != "https://gateway.example/custom/v1" || input["api_key"] != "test-secret" || input["model"] != "test-model" || input["benchmark"] != tc.benchmark || input["protocol"] != "responses" || input["reasoning_effort"] != "high" || input["service_tier"] != "priority" || len(input) != 7 {
+					model := "test-model"
+					if tc.benchmark == "pelican" {
+						model = manxuePelicanModel
+					}
+					if input["base_url"] != "https://gateway.example/custom/v1" || input["api_key"] != "test-secret" || input["model"] != model || input["benchmark"] != tc.benchmark || input["protocol"] != nil || input["reasoning_effort"] != "high" || input["service_tier"] != "priority" || len(input) != 6 {
 						t.Errorf("wrong request: %+v", input)
 					}
 					if !manxueTaskID.MatchString(r.Header.Get("Idempotency-Key")) {
@@ -219,8 +223,8 @@ func TestManxueSettingsCompatibilityAndIndependentVerdict(t *testing.T) {
 		t.Fatal("pelican chat mode rejected")
 	}
 	q.ManxueBenchmark = "candy"
-	if q.validate() == nil {
-		t.Fatal("candy accepted chat mode")
+	if q.validate() != nil {
+		t.Fatal("obsolete protocol setting blocked a valid candy configuration")
 	}
 	q.ManxueProtocol, q.ReasoningEffort = "responses", "ultra"
 	if q.validate() != nil {
@@ -256,6 +260,77 @@ func TestManxueURLValidation(t *testing.T) {
 		if !ok || got != want {
 			t.Errorf("lost custom path: %q", got)
 		}
+	}
+}
+
+func TestManxueHTTPFailuresAreSpecificAndNeverChangeQualityEvidence(t *testing.T) {
+	for _, tc := range []struct {
+		status int
+		key    string
+	}{
+		{400, "manxueRequestInvalid"}, {422, "manxueRequestInvalid"},
+		{401, "manxueAccessDenied"}, {403, "manxueAccessDenied"},
+		{404, "manxueEndpointUnavailable"}, {409, "manxueConflict"},
+		{413, "manxueRequestTooLarge"}, {415, "manxueContentType"},
+		{307, "manxueRedirect"}, {502, "manxueServerError"},
+	} {
+		t.Run(fmt.Sprint(tc.status), func(t *testing.T) {
+			calls := 0
+			runner := manxueTestRunner(t, func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				w.WriteHeader(tc.status)
+				fmt.Fprint(w, `{"error":"test-secret private-task-id"}`)
+			})
+			q := defaultQualitySettings()
+			q.DetectionMethod = qualityMethodManxue
+			out := runner.ProbeQuality(context.Background(), upstream.ProbeCredential{BaseURL: "https://gateway.example", Key: "test-secret"}, ProviderOpenAI, q, QualityQuestion{})
+			if out.ErrorKey != qualityPrefix+tc.key || out.Verdict != "" || calls != 1 {
+				t.Fatalf("wrong HTTP diagnostic or unexpected retry: %+v (%d calls)", out, calls)
+			}
+			raw, _ := json.Marshal(out)
+			if strings.Contains(string(raw), "test-secret") || strings.Contains(string(raw), "private-task-id") {
+				t.Fatal("error exposed credentials or task ID")
+			}
+			for _, degraded := range []bool{false, true} {
+				before := QualityState{Degraded: degraded, Failures: 1, Successes: 0}
+				after := applyQualitySample(before, q, q.activeQuestions()[0], QualitySample{ErrorKey: out.ErrorKey, CreatedAt: time.Now()})
+				if after.Degraded != before.Degraded || after.Failures != before.Failures || after.Successes != before.Successes || after.Latest.Result != "error" {
+					t.Fatal("API error counted as degradation or recovery")
+				}
+			}
+		})
+	}
+}
+
+func TestManxueCandyUsagePreservesUnknownAndZero(t *testing.T) {
+	for _, tc := range []struct {
+		name, fields, reported string
+		input, output          string
+	}{
+		{"reported", `"input_tokens":4300,"output_tokens":1000,`, `"usage_reported":true,`, "4300", "1000"},
+		{"zero", `"input_tokens":0,"output_tokens":0,`, `"usage_reported":true,`, "0", "0"},
+		{"legacy", `"input_tokens":12,"output_tokens":7,`, "", "12", "7"},
+		{"missing", "", "", "<nil>", "<nil>"},
+		{"not reported", `"input_tokens":0,"output_tokens":0,`, `"usage_reported":false,`, "<nil>", "<nil>"},
+		{"partial", `"input_tokens":12,`, "", "12", "<nil>"},
+		{"negative", `"input_tokens":-1,"output_tokens":8,`, "", "<nil>", "8"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var task manxueTask
+			if err := json.Unmarshal([]byte(`{`+tc.reported+`"benchmark":"candy","status":"succeeded","candy":{`+tc.fields+`"status":"passed","answer":"ok","duration_ms":1000}}`), &task); err != nil {
+				t.Fatal(err)
+			}
+			out := manxueVerdict(task, "candy", "secret")
+			value := func(n *int64) string {
+				if n == nil {
+					return "<nil>"
+				}
+				return fmt.Sprint(*n)
+			}
+			if out.Verdict != "passed" || out.ErrorKey != "" || value(out.InputTokens) != tc.input || value(out.OutputTokens) != tc.output {
+				t.Fatalf("usage/quality mismatch: %+v", out)
+			}
+		})
 	}
 }
 
@@ -318,16 +393,24 @@ func TestManxuePostgresSettingsAndHistory(t *testing.T) {
 	if err != nil || loaded.DetectionMethod != q.DetectionMethod || loaded.ManxueProtocol != q.ManxueProtocol || loaded.ManxueBenchmark != q.ManxueBenchmark || loaded.ManxueServiceTier != q.ManxueServiceTier {
 		t.Fatal("API options lost on reload")
 	}
+	if qualityProbeModel(loaded) != manxuePelicanModel {
+		t.Fatal("legacy pelican config did not select the required model")
+	}
 	_ = repo.SetQualityGroup(ctx, "u", "w", "g", true)
 	id, _ := newID()
-	sample := QualitySample{ID: id, TargetID: "channel", DetectionMethod: qualityMethodManxue, Benchmark: "pelican", Report: "normal", Result: "passed", CreatedAt: time.Now()}
+	inputTokens, outputTokens := int64(4300), int64(1000)
+	sample := QualitySample{ID: id, TargetID: "channel", DetectionMethod: qualityMethodManxue, Benchmark: "candy", InputTokens: &inputTokens, OutputTokens: &outputTokens, Report: "normal", Result: "passed", CreatedAt: time.Now()}
 	state := QualityState{TargetID: "channel", Revision: q.Revision, Latest: sample}
 	if ok, err := repo.SaveQualityResult(ctx, "u", "w", []string{"g"}, q, state); err != nil || !ok {
 		t.Fatal(err)
 	}
 	history, err := repo.ListQualityHistory(ctx, "u", "w", []string{"channel"}, 100)
-	if err != nil || len(history) != 1 || history[0].Report != "normal" || history[0].Benchmark != "pelican" {
+	if err != nil || len(history) != 1 || history[0].Report != "normal" || history[0].Benchmark != "candy" || history[0].InputTokens == nil || *history[0].InputTokens != 4300 || history[0].OutputTokens == nil || *history[0].OutputTokens != 1000 {
 		t.Fatal("external evidence lost")
+	}
+	detail, err := NewRepository(pool).GetQualitySample(ctx, "u", "w", "channel", id)
+	if err != nil || detail == nil || detail.InputTokens == nil || *detail.InputTokens != 4300 || detail.OutputTokens == nil || *detail.OutputTokens != 1000 {
+		t.Fatal("usage was not persisted in the detailed record")
 	}
 	_, err = pool.Exec(ctx, `UPDATE connection_health_quality_settings SET config = config - 'detectionMethod' - 'manxueBenchmark' - 'manxueProtocol'`)
 	if err != nil {

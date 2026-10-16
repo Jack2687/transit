@@ -14,6 +14,8 @@ import (
 )
 
 type qualityProbeResult struct {
+	InputTokens  *int64
+	OutputTokens *int64
 	HTML         string
 	HTMLTooLarge bool
 	Verdict      string

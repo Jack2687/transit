@@ -480,7 +480,7 @@ func (s *Service) runQualityCandidate(ctx context.Context, scope QualityScope, s
 	if err != nil {
 		return QualitySample{}, err
 	}
-	sample := QualitySample{Manual: manual, ID: id, TargetID: c.targetID, Model: q.Model, QuestionID: question.ID, QuestionName: question.Name, ExpectedAnswer: question.Answer, MatchMode: question.MatchMode, MaxDurationMS: question.MaxDurationMS}
+	sample := QualitySample{Manual: manual, ID: id, TargetID: c.targetID, Model: qualityProbeModel(q), QuestionID: question.ID, QuestionName: question.Name, ExpectedAnswer: question.Answer, MatchMode: question.MatchMode, MaxDurationMS: question.MaxDurationMS}
 	started := time.Now()
 	sample.StartedAt = &started
 	sample.Prompt, sample.Mode = question.Prompt, q.Mode
@@ -503,6 +503,7 @@ func (s *Service) runQualityCandidate(ctx context.Context, scope QualityScope, s
 			return QualitySample{}, unavailable
 		}
 		outcome := s.qualityRunner.ProbeQuality(ctx, cred, c.account.Platform, q, question)
+		sample.InputTokens, sample.OutputTokens = outcome.InputTokens, outcome.OutputTokens
 		sample.HTML, sample.HTMLTooLarge = outcome.HTML, outcome.HTMLTooLarge
 		sample.HasHTML = sample.HTML != ""
 		sample.Result = outcome.Verdict

@@ -17,7 +17,6 @@ const efforts = computed(() => manxue.value ? form.value?.manxueBenchmark === 'p
 function normalizeMethodOptions() {
   if (!form.value) return
   if (!efforts.value.includes(form.value.reasoningEffort)) form.value.reasoningEffort = ''
-  if (form.value.manxueBenchmark === 'candy') form.value.manxueProtocol = 'responses'
   if (!manxue.value && form.value.timeoutSeconds > 300) form.value.timeoutSeconds = 300
 }
 const busy = ref(false)
@@ -122,18 +121,18 @@ const numbers = computed(() => numberFields.filter(item => item.key !== 'failure
             <p v-if="manxue" class="rounded-lg bg-primary/5 px-3 py-2 text-xs leading-5 text-muted-foreground">{{ t(`${p}.manxueDisclosure`) }} <a href="https://manxue.ai/api" target="_blank" rel="noopener noreferrer" class="text-primary underline">{{ t(`${p}.manxueDocs`) }}</a></p>
             <nav class="flex gap-5 border-b border-border" :aria-label="t(`${p}.settingsTitle`)"><button v-for="item in ['questions', 'schedule'] as const" :key="item" type="button" class="border-b-2 pb-3 text-sm" :class="tab === item ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'" @click="tab = item">{{ t(`${p}.${item === 'questions' && manxue ? 'manxueOptions' : item}`) }}</button></nav>
             <div v-show="tab === 'questions'" class="space-y-5">
-              <div v-if="manxue" class="grid gap-4 sm:grid-cols-3">
+              <div v-if="manxue" class="grid gap-4 sm:grid-cols-2">
                 <label class="quality-label">{{ t(`${p}.manxueBenchmark`) }}<select v-model="form.manxueBenchmark" class="quality-input" @change="normalizeMethodOptions"><option value="candy">{{ t(`${p}.benchmarks.candy`) }}</option><option value="pelican">{{ t(`${p}.benchmarks.pelican`) }}</option></select></label>
-                <label class="quality-label">{{ t(`${p}.manxueProtocol`) }}<select v-model="form.manxueProtocol" class="quality-input" :disabled="form.manxueBenchmark === 'candy'"><option value="responses">Responses</option><option v-if="form.manxueBenchmark === 'pelican'" value="chat_completions">Chat Completions</option></select></label>
                 <label class="quality-label">{{ t(`${p}.manxueServiceTier`) }}<select v-model="form.manxueServiceTier" class="quality-input"><option value="">{{ t(`${p}.defaultEffort`) }}</option><option value="priority">Fast (priority)</option><option value="ultrafast">UltraFast (ultrafast)</option></select></label>
               </div>
               <div class="grid gap-4" :class="manxue ? 'sm:grid-cols-2' : 'sm:grid-cols-3'">
-                <label class="quality-label">{{ t(`${p}.model`) }}<input v-model="form.model" class="quality-input" maxlength="200" required></label>
+                <label class="quality-label">{{ t(`${p}.model`) }}<input v-if="manxue && form.manxueBenchmark === 'pelican'" value="gpt-6-astra" class="quality-input" disabled><input v-else v-model="form.model" class="quality-input" maxlength="200" required></label>
                 <label class="quality-label">{{ t(`${p}.reasoningEffort`) }}<select v-model="form.reasoningEffort" class="quality-input"><option value="">{{ t(`${p}.defaultEffort`) }}</option><option v-for="effort in efforts" :key="effort" :value="effort">{{ effort }}</option></select></label>
                 <label v-if="!manxue" class="quality-label">{{ t(`${p}.mode`) }}<select v-model="form.mode" class="quality-input"><option v-for="mode in ['content_time','content','time']" :key="mode" :value="mode">{{ t(`${p}.modes.${mode}`) }}</option></select></label>
               </div>
               <p v-if="manxue" class="text-xs leading-5 text-muted-foreground">{{ t(`${p}.manxueVerdictHint`) }}</p>
-              <template v-else>
+              <p v-if="manxue && form.manxueBenchmark === 'pelican'" class="text-xs leading-5 text-muted-foreground">{{ t(`${p}.manxuePelicanModelHint`) }}</p>
+              <template v-if="!manxue">
                 <div class="flex items-center justify-between gap-2"><h3 class="text-sm font-medium">{{ t(`${p}.questionBank`) }} <span class="text-muted-foreground">{{ form.questions.length }}/50</span></h3><button type="button" :disabled="form.questions.length >= 50" class="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs disabled:opacity-40" @click="addQuestion"><Plus class="h-3.5 w-3.5" />{{ t(`${p}.add`) }}</button></div>
                 <div class="grid gap-4 md:grid-cols-[14rem_minmax(0,1fr)]">
                   <div class="space-y-1">

@@ -19,6 +19,7 @@ import (
 // https://manxue.ai/api documents an asynchronous API, not a model endpoint.
 // The origin is fixed so channel credentials cannot be redirected elsewhere.
 const manxueTestsURL = "https://manxue.ai/api/v1/tests"
+const manxuePelicanModel = "gpt-6-astra"
 const maxQualityHTMLBytes = 2 * 1024 * 1024
 
 var manxueTaskID = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
@@ -29,13 +30,16 @@ type manxueProbeRunner struct {
 }
 
 type manxueTask struct {
-	ID        string `json:"id"`
-	Benchmark string `json:"benchmark"`
-	Status    string `json:"status"`
-	Candy     *struct {
-		Status     string `json:"status"`
-		Answer     string `json:"answer"`
-		DurationMS int    `json:"duration_ms"`
+	UsageReported *bool  `json:"usage_reported"`
+	ID            string `json:"id"`
+	Benchmark     string `json:"benchmark"`
+	Status        string `json:"status"`
+	Candy         *struct {
+		Status       string `json:"status"`
+		Answer       string `json:"answer"`
+		DurationMS   int    `json:"duration_ms"`
+		InputTokens  *int64 `json:"input_tokens"`
+		OutputTokens *int64 `json:"output_tokens"`
 	} `json:"candy"`
 	Assessment *struct {
 		Quality string `json:"quality"`
@@ -112,17 +116,10 @@ func (r *manxueProbeRunner) request(ctx context.Context, method, endpoint string
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusServiceUnavailable {
-		return manxueTask{}, resp.StatusCode, resp.Header.Get("Retry-After"), "rate_limited"
+		return manxueTask{}, resp.StatusCode, resp.Header.Get("Retry-After"), qualityPrefix + "manxueRateLimited"
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		key := "invalid_response"
-		if resp.StatusCode >= 500 {
-			key = "server_error"
-		}
-		if resp.StatusCode == 404 {
-			key = qualityPrefix + "manxueExpired"
-		}
-		return manxueTask{}, resp.StatusCode, "", key
+		return manxueTask{}, resp.StatusCode, "", manxueHTTPError(method, resp.StatusCode)
 	}
 	if method == http.MethodDelete {
 		return manxueTask{}, resp.StatusCode, "", ""
@@ -133,9 +130,48 @@ func (r *manxueProbeRunner) request(ctx context.Context, method, endpoint string
 	}
 	var task manxueTask
 	if len(raw) > 4*1024*1024 || json.Unmarshal(raw, &task) != nil {
-		return task, resp.StatusCode, "", "invalid_response"
+		return task, resp.StatusCode, "", qualityPrefix + "manxueInvalidResponse"
 	}
 	return task, resp.StatusCode, "", ""
+}
+
+// Keep diagnostics specific without exposing the response body, which may echo
+// channel credentials or private task IDs.
+func manxueHTTPError(method string, status int) string {
+	key := "manxueInvalidResponse"
+	switch status {
+	case http.StatusBadRequest, http.StatusUnprocessableEntity:
+		key = "manxueRequestInvalid"
+	case http.StatusUnauthorized, http.StatusForbidden:
+		key = "manxueAccessDenied"
+	case http.StatusNotFound:
+		key = "manxueEndpointUnavailable"
+		if method != http.MethodPost {
+			key = "manxueExpired"
+		}
+	case http.StatusConflict:
+		key = "manxueConflict"
+	case http.StatusRequestEntityTooLarge:
+		key = "manxueRequestTooLarge"
+	case http.StatusUnsupportedMediaType:
+		key = "manxueContentType"
+	default:
+		if status >= 300 && status < 400 {
+			key = "manxueRedirect"
+		} else if status >= 500 {
+			key = "manxueServerError"
+		}
+	}
+	return qualityPrefix + key
+}
+
+// Pelican's public API requires a fixed model. Preserve the configured model for
+// candy/custom checks and record the effective model in each individual result.
+func qualityProbeModel(q QualitySettings) string {
+	if q.DetectionMethod == qualityMethodManxue && q.ManxueBenchmark == "pelican" {
+		return manxuePelicanModel
+	}
+	return q.Model
 }
 
 func (r *manxueProbeRunner) ProbeQuality(ctx context.Context, cred upstream.ProbeCredential, provider string, q QualitySettings, _ QualityQuestion) (out qualityProbeResult) {
@@ -162,7 +198,7 @@ func (r *manxueProbeRunner) ProbeQuality(ctx context.Context, cred upstream.Prob
 	if err != nil {
 		return qualityProbeResult{ErrorKey: "invalid_response"}
 	}
-	payload := map[string]any{"benchmark": q.ManxueBenchmark, "base_url": base, "api_key": cred.Key, "model": q.Model, "protocol": q.ManxueProtocol}
+	payload := map[string]any{"benchmark": q.ManxueBenchmark, "base_url": base, "api_key": cred.Key, "model": qualityProbeModel(q)}
 	if q.ReasoningEffort != "" {
 		payload["reasoning_effort"] = q.ReasoningEffort
 	}
@@ -181,7 +217,7 @@ func (r *manxueProbeRunner) ProbeQuality(ctx context.Context, cred upstream.Prob
 			return qualityProbeResult{ErrorKey: errorKey}
 		}
 		if status != http.StatusAccepted || !manxueTaskID.MatchString(task.ID) {
-			return qualityProbeResult{ErrorKey: "invalid_response"}
+			return qualityProbeResult{ErrorKey: qualityPrefix + "manxueInvalidResponse"}
 		}
 		break
 	}
@@ -202,7 +238,7 @@ func (r *manxueProbeRunner) ProbeQuality(ctx context.Context, cred upstream.Prob
 	backoff := 0
 	for {
 		if task.Benchmark != q.ManxueBenchmark {
-			return qualityProbeResult{ErrorKey: "invalid_response"}
+			return qualityProbeResult{ErrorKey: qualityPrefix + "manxueInvalidResponse"}
 		}
 		switch task.Status {
 		case "succeeded":
@@ -213,7 +249,7 @@ func (r *manxueProbeRunner) ProbeQuality(ctx context.Context, cred upstream.Prob
 			return qualityProbeResult{ErrorKey: qualityPrefix + "manxueFailed"}
 		case "queued", "pending", "running":
 		default:
-			return qualityProbeResult{ErrorKey: "invalid_response"}
+			return qualityProbeResult{ErrorKey: qualityPrefix + "manxueInvalidResponse"}
 		}
 		if !manxueWait(ctx, interval) {
 			return qualityProbeResult{ErrorKey: qualityPrefix + "manxueTimeout"}
@@ -236,7 +272,7 @@ func (r *manxueProbeRunner) ProbeQuality(ctx context.Context, cred upstream.Prob
 			return qualityProbeResult{ErrorKey: errorKey}
 		}
 		if status != http.StatusOK || next.ID != task.ID {
-			return qualityProbeResult{ErrorKey: "invalid_response"}
+			return qualityProbeResult{ErrorKey: qualityPrefix + "manxueInvalidResponse"}
 		}
 		task = next
 		interval, backoff = r.pollInterval, 0
@@ -260,6 +296,10 @@ func manxueVerdict(task manxueTask, benchmark, key string) qualityProbeResult {
 	}
 	if benchmark == "candy" && task.Candy != nil {
 		out.DurationMS = task.Candy.DurationMS
+		if task.UsageReported == nil || *task.UsageReported {
+			out.InputTokens = manxueTokenCount(task.Candy.InputTokens)
+			out.OutputTokens = manxueTokenCount(task.Candy.OutputTokens)
+		}
 		out.Answer = truncate(redact(task.Candy.Answer, key), 4000)
 		switch task.Candy.Status {
 		case "passed":
@@ -288,4 +328,11 @@ func manxueVerdict(task manxueTask, benchmark, key string) qualityProbeResult {
 		return qualityProbeResult{ErrorKey: "invalid_response"}
 	}
 	return out
+}
+
+func manxueTokenCount(count *int64) *int64 {
+	if count == nil || *count < 0 {
+		return nil
+	}
+	return count
 }
