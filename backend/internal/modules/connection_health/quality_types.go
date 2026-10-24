@@ -23,6 +23,7 @@ type QualityQuestion struct {
 // Global within one connected workspace, never shared between users or sites.
 // Suspension is opt-in and additionally requires health-policy action permissions.
 type QualitySettings struct {
+	ChannelRevision    string            `json:"-"`
 	AutoSuspendEnabled bool              `json:"autoSuspendEnabled"`
 	DetectionMethod    string            `json:"detectionMethod"`
 	ManxueBenchmark    string            `json:"manxueBenchmark"`
@@ -190,15 +191,16 @@ func qualitySampleSummary(sample QualitySample) QualitySample {
 }
 
 type QualityState struct {
-	TargetID       string        `json:"targetId"`
-	Revision       string        `json:"revision"`
-	Status         string        `json:"status"`
-	Degraded       bool          `json:"degraded"`
-	Failures       int           `json:"failures"`
-	Successes      int           `json:"successes"`
-	NextQuestionID string        `json:"nextQuestionId"`
-	NextProbeAt    time.Time     `json:"nextProbeAt"`
-	Latest         QualitySample `json:"latest"`
+	ChannelRevision string        `json:"channelRevision,omitempty"`
+	TargetID        string        `json:"targetId"`
+	Revision        string        `json:"revision"`
+	Status          string        `json:"status"`
+	Degraded        bool          `json:"degraded"`
+	Failures        int           `json:"failures"`
+	Successes       int           `json:"successes"`
+	NextQuestionID  string        `json:"nextQuestionId"`
+	NextProbeAt     time.Time     `json:"nextProbeAt"`
+	Latest          QualitySample `json:"latest"`
 }
 
 var qualityFinalAnswerPattern = regexp.MustCompile(`(?m)^\s*FINAL_ANSWER\s*=\s*([^\r\n]+)\s*$`)
@@ -220,6 +222,7 @@ func qualityAnswerMatches(question QualityQuestion, answer string) bool {
 func applyQualitySample(state QualityState, config QualitySettings, question QualityQuestion, sample QualitySample) QualityState {
 	state.TargetID = sample.TargetID
 	state.Revision = config.Revision
+	state.ChannelRevision = config.ChannelRevision
 	interval := config.IntervalSeconds
 	if config.DetectionMethod == qualityMethodManxue && sample.ErrorKey == "" && sample.Result != "passed" && sample.Result != "failed" {
 		sample.ErrorKey = qualityPrefix + "manxueUnknown"

@@ -11,7 +11,7 @@ import type { AdminGroupAccount } from '../../types/connectionHealth'
 import { channelAutomationEnabled, latestChannelProbe } from '../../utils/connectionHealthChannels'
 
 const props = defineProps<{ account: AdminGroupAccount; historyUnavailable?: boolean; showQuality?: boolean; qualityEnabled?: boolean; qualityUnavailable?: boolean; qualityBusy?: boolean; qualityProbeMethod?: QualityManualMethod; qualityError?: string; suspensionBusy?: boolean; suspensionError?: string; priorityBusy?: boolean; priorityError?: string; autoProbeBusy?: boolean; autoProbeError?: string; qualitySuspensionBusy?: boolean; qualitySuspensionError?: string }>()
-const emit = defineEmits<{ probe: [account: AdminGroupAccount]; 'view-events': [account: AdminGroupAccount]; 'view-quality': [account: AdminGroupAccount]; 'toggle-quality': [account: AdminGroupAccount]; 'probe-quality': [account: AdminGroupAccount, method: QualityManualMethod]; 'toggle-suspension': [account: AdminGroupAccount]; 'toggle-priority': [account: AdminGroupAccount]; 'toggle-auto-probe': [account: AdminGroupAccount]; 'toggle-quality-suspension': [account: AdminGroupAccount] }>()
+const emit = defineEmits<{ 'edit-models': [account: AdminGroupAccount]; probe: [account: AdminGroupAccount]; 'view-events': [account: AdminGroupAccount]; 'view-quality': [account: AdminGroupAccount]; 'toggle-quality': [account: AdminGroupAccount]; 'probe-quality': [account: AdminGroupAccount, method: QualityManualMethod]; 'toggle-suspension': [account: AdminGroupAccount]; 'toggle-priority': [account: AdminGroupAccount]; 'toggle-auto-probe': [account: AdminGroupAccount]; 'toggle-quality-suspension': [account: AdminGroupAccount] }>()
 const { t } = useI18n()
 const prefix = 'admin.connectionHealth'
 const qualityMethods: QualityManualMethod[] = ['questions', 'manxue_candy', 'manxue_pelican']
@@ -61,6 +61,7 @@ const state = computed(() => {
             <Loader2 v-if="control.busy" class="h-4 w-7 animate-spin" />
             <span v-else class="relative h-4 w-7 shrink-0 rounded-full transition-colors" :class="control.checked ? 'bg-primary' : 'bg-muted-foreground/25'" aria-hidden="true"><span class="absolute left-0 top-0.5 h-3 w-3 rounded-full bg-white transition-transform" :class="control.checked ? 'translate-x-3.5' : 'translate-x-0.5'" /></span>
           </button>
+          <button type="button" class="flex w-full items-center gap-2 rounded-md border-t border-border/60 px-3 py-2.5 text-xs hover:bg-surface" @click.stop="emit('edit-models', account)"><Settings2 class="h-3.5 w-3.5" />{{ t(`${prefix}.channelModels.title`) }}</button>
           <p v-if="!selectedForAutomation" class="border-t border-border/60 px-3 py-2 text-[11px] leading-5 text-muted-foreground">{{ t(`${prefix}.quality.inactiveAutomationHint`) }}</p>
         </ChannelActionDropdown>
         <ChannelActionDropdown :label="t(`${prefix}.channelMenus.qualityFor`, { name: account.name || account.id })">
@@ -71,6 +72,7 @@ const state = computed(() => {
               <Play v-else class="h-3.5 w-3.5" aria-hidden="true" />
               {{ t(`${prefix}.quality.manualLabels.${method}`) }}
             </button>
+            <button type="button" class="flex w-full items-center gap-2 rounded-md border-t border-border/60 px-3 py-2.5 text-xs hover:bg-surface" @click.stop="close(); emit('edit-models', account)"><Settings2 class="h-3.5 w-3.5" />{{ t(`${prefix}.channelModels.title`) }}</button>
           </template>
         </ChannelActionDropdown>
         <button type="button" class="inline-flex h-6 shrink-0 items-center gap-1 rounded px-1.5 text-xs text-primary hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" :aria-label="t(`${prefix}.quality.detail.open`, { name: account.name || account.id })" @click.stop="emit('view-quality', account)"><Eye class="h-3.5 w-3.5" />{{ t(`${prefix}.quality.detail.channelButton`) }}</button>

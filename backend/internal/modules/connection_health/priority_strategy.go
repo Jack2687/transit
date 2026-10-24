@@ -176,7 +176,15 @@ func (s *Service) syncWorkspacePriorities(
 	if err != nil {
 		return
 	}
+	modelSettings, err := s.repo.ListChannelModels(ctx, userID, adminAccountID)
+	if err != nil {
+		return
+	}
 	for targetID, item := range inventory {
+		item.policies = channelProbePolicies(item.policies, modelSettings[targetID].ProbeModel)
+		if model := modelSettings[targetID].ProbeModel; model != "" {
+			item.target.Models = []string{model}
+		}
 		item.policies = channelSuspensionPolicies(item.policies, channelSuspensionEnabled(suspensionSettings, targetID))
 	}
 	statesByTarget := make(map[string][]ConnectionHealthState)

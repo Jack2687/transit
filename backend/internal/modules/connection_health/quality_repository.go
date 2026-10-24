@@ -216,6 +216,17 @@ func (r *Repository) saveQualityResult(ctx context.Context, user, workspace stri
 	if err != nil {
 		return false, err
 	}
+	// Reject old-model evidence even when the model changes during a manual test.
+	if _, err := tx.Exec(ctx, `INSERT INTO connection_health_channel_models(user_id,admin_account_id,target_id) VALUES($1,$2,$3) ON CONFLICT DO NOTHING`, user, workspace, state.TargetID); err != nil {
+		return false, err
+	}
+	var channelRevision string
+	if err := tx.QueryRow(ctx, `SELECT quality_revision FROM connection_health_channel_models WHERE user_id=$1 AND admin_account_id=$2 AND target_id=$3 FOR SHARE`, user, workspace, state.TargetID).Scan(&channelRevision); err != nil {
+		return false, err
+	}
+	if channelRevision != q.ChannelRevision {
+		return false, nil
+	}
 	if !manual {
 		// Materialize an inherited row and lock it, so concurrent channel changes
 		// cannot race the commit. Saving evidence never creates an independent opt-in.

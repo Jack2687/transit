@@ -49,7 +49,19 @@ func (s *Service) manualProbeJob(ctx context.Context, userID, targetID string) (
 		return job, requestError(ErrorProbeTargetNotFound)
 	}
 	job.models, err = s.currentScheduledModels(ctx, job)
-	return job, err
+	if err != nil {
+		return job, err
+	}
+	if len(job.models) == 0 {
+		settings, err := s.repo.ListChannelModels(ctx, userID, workspace)
+		if err != nil {
+			return job, err
+		}
+		if model := settings[targetID].ProbeModel; model != "" {
+			job.models = []probeModelSpec{{modelName: model, providerFamily: job.target.ProviderFamily, maxProbeTokens: 1, policy: Policy{ProbeMode: ProbeModeLight}}}
+		}
+	}
+	return job, nil
 }
 
 // Manual requests skip the interval but share the scheduler's policy engine.
@@ -88,6 +100,7 @@ func (s *Service) manualProbeTarget(ctx context.Context, userID, targetID string
 		byModel[spec.modelName] = spec
 	}
 	specs := make([]probeModelSpec, 0, len(requested))
+	policyAssigned := false
 	for _, name := range requested {
 		spec, ok := byModel[name]
 		if !ok {
@@ -97,12 +110,13 @@ func (s *Service) manualProbeTarget(ctx context.Context, userID, targetID string
 			spec = probeModelSpec{modelName: name, providerFamily: job.target.ProviderFamily, maxProbeTokens: 1, policy: Policy{ProbeMode: ProbeModeLight}}
 		}
 		specs = append(specs, spec)
+		policyAssigned = policyAssigned || spec.policy.ID != ""
 	}
 	var cred upstream.ProbeCredential
 	var credentialErr error
 	if probeSpecsNeedCredentials(specs) {
 		cred, credentialErr = s.platformGroups.ResolveProbeCredential(job.session, job.account)
-		if credentialErr != nil && len(job.models) == 0 {
+		if credentialErr != nil && !policyAssigned {
 			return nil, requestError(reasonToErrorKey(upstream.ProbeCredentialReason(credentialErr)))
 		}
 	}

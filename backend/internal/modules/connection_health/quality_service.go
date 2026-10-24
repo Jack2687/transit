@@ -138,6 +138,11 @@ func (s *Service) attachQuality(ctx context.Context, user, workspace string, gro
 		s.qualityUnavailable(groups)
 		return
 	}
+	models, err := s.repo.ListChannelModels(ctx, user, workspace)
+	if err != nil {
+		s.qualityUnavailable(groups)
+		return
+	}
 	disabledChannels := map[string]bool{}
 	independentChannels := map[string]bool{}
 	for _, channel := range channels {
@@ -164,7 +169,7 @@ func (s *Service) attachQuality(ctx context.Context, user, workspace string, gro
 	}
 	byTarget := map[string]QualityState{}
 	for _, state := range states {
-		if state.Revision == q.Revision {
+		if state.Revision == q.Revision && state.ChannelRevision == models[state.TargetID].QualityRevision {
 			byTarget[state.TargetID] = state
 		}
 	}
@@ -192,6 +197,8 @@ func (s *Service) attachQuality(ctx context.Context, user, workspace string, gro
 		g.Quality = &QualityGroup{GroupID: g.ID, Enabled: enabled[g.ID], GlobalEnabled: q.Enabled}
 		for j := range g.Accounts {
 			a := &g.Accounts[j]
+			a.QualityModel = models[a.TargetID].QualityModel
+			a.QualityGlobalModel = q.Model
 			a.QualitySuspended = suspended[a.TargetID]
 			a.QualitySuspensionRestorePending = !a.QualitySuspensionEnabled && a.QualitySuspended
 			a.QualityEnabled = a.QualitySelected && !disabledChannels[a.TargetID] && (enabled[g.ID] || independentChannels[a.TargetID])
@@ -301,7 +308,7 @@ func (s *Service) runQualityScope(ctx context.Context, scope QualityScope, token
 	}
 	byState := map[string]QualityState{}
 	for _, st := range states {
-		if st.Revision == q.Revision {
+		if st.Revision == q.Revision && st.ChannelRevision == selection.models[st.TargetID].QualityRevision {
 			byState[st.TargetID] = st
 		}
 	}
@@ -394,13 +401,18 @@ func (s *Service) runQualityCandidate(ctx context.Context, scope QualityScope, s
 	defer release()
 	// Inventory collection can race a manual check. Reload after acquiring the
 	// channel lease so queued automatic work uses the updated due time and question.
+	selection, err := s.loadQualitySelection(ctx, scope.UserID, scope.WorkspaceID)
+	if err != nil {
+		return QualitySample{}, err
+	}
+	q = channelQualitySettings(q, selection.models[c.targetID])
 	states, err := s.qualityRepo.ListQualityStates(ctx, scope.UserID, scope.WorkspaceID)
 	if err != nil {
 		return QualitySample{}, err
 	}
 	var state QualityState
 	for _, st := range states {
-		if st.TargetID == c.targetID && st.Revision == q.Revision {
+		if st.TargetID == c.targetID && st.Revision == q.Revision && st.ChannelRevision == q.ChannelRevision {
 			state = st
 			break
 		}
@@ -424,7 +436,7 @@ func (s *Service) runQualityCandidate(ctx context.Context, scope QualityScope, s
 	if err != nil || (!manual && !current.Enabled) || current.Revision != q.Revision {
 		return QualitySample{}, unavailable
 	}
-	selection, err := s.loadQualitySelection(ctx, scope.UserID, scope.WorkspaceID)
+	selection, err = s.loadQualitySelection(ctx, scope.UserID, scope.WorkspaceID)
 	if err != nil {
 		return QualitySample{}, err
 	}
@@ -432,7 +444,7 @@ func (s *Service) runQualityCandidate(ctx context.Context, scope QualityScope, s
 		return QualitySample{}, requestError(qualityPrefix + "healthPausedHint")
 	}
 	canProbe := func(selection qualitySelection, group string) bool {
-		return !selection.pausedChannels[c.targetID] && (manual || selection.canProbe(group, c.targetID))
+		return selection.models[c.targetID].QualityRevision == q.ChannelRevision && !selection.pausedChannels[c.targetID] && (manual || selection.canProbe(group, c.targetID))
 	}
 	// Refresh the group membership before each real request, including queued jobs.
 	matched := false

@@ -259,7 +259,11 @@ func (s *Service) restoreUnmanagedTargetAction(ctx context.Context, policies []P
 			}
 		}
 	}
-	specs := candidateModelSpecs(target.Models, effectivePolicies)
+	modelSettings, err := s.repo.ListChannelModels(ctx, stored.UserID, stored.AdminAccountID)
+	if err != nil {
+		return
+	}
+	specs := channelProbeSpecs(target.Models, effectivePolicies, modelSettings[stored.TargetID].ProbeModel)
 	if found && stored.QualitySuspended {
 		allowed, readErr := s.repo.GetChannelQualitySuspension(ctx, stored.UserID, stored.AdminAccountID, stored.TargetID)
 		if readErr != nil {

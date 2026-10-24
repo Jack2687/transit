@@ -19,6 +19,7 @@ import (
 
 // fakeRepository 是 healthRepository 的内存实现，供 service 单测使用，不连接真实数据库。
 type fakeRepository struct {
+	channelModels             map[string]map[string]ChannelModels
 	channelPriorities         map[string]bool
 	channelQualitySuspensions map[string]bool
 	channelAutoProbes         map[string]bool
@@ -43,6 +44,7 @@ func newFakeRepository() *fakeRepository {
 		channelPriorities:         map[string]bool{},
 		channelQualitySuspensions: map[string]bool{},
 		channelAutoProbes:         map[string]bool{},
+		channelModels:             map[string]map[string]ChannelModels{},
 		channelSuspensions:        map[string]bool{},
 		groupProbeConfigs:         map[string]GroupProbeConfig{},
 		states:                    map[string]map[string]ConnectionHealthState{},

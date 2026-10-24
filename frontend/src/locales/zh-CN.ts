@@ -865,6 +865,15 @@ export default {
         label: '自动探活', toggle: '切换渠道 {name} 的自动探活', off: '探活已关',
         hint: '关闭后停止发起新的定时探活，正在执行的请求会完成；手动探活仍按策略执行并记录历史。同一渠道各分组共用此设置，降智测试和其他开关独立控制。'
       },
+      channelModels: {
+        title: '渠道模型设置', probe: '探活模型', quality: '降智检测模型',
+        inheritProbe: '跟随自动化策略（默认）', inheritQuality: '跟随全局配置（默认）',
+        name: '模型名称', placeholder: '填写渠道支持的模型名称', globalModel: '全局模型：{model}',
+        probeHint: '自动探活和手动探活均使用此模型，探活方式、间隔、阈值及优先级规则继续跟随策略。未配置策略时仅用于手动轻量探活。',
+        qualityHint: '用于自动和手动的自定义题目、API 糖果测试。API 鹈鹕测试仍固定使用 gpt-6-astra。',
+        sharedHint: '同一渠道在多个分组中共用这些设置。勾选跟随默认即可恢复继承，已有检测历史保留。',
+        save: '保存', cancel: '取消', close: '关闭',
+      },
       channelMenus: { automation: '自动化', automationFor: '渠道 {name} 的自动化设置', quality: '降智测试', qualityFor: '渠道 {name} 的降智测试' },
       channelPriority: {
         label: '允许变动优先级',

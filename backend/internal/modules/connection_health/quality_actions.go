@@ -86,12 +86,16 @@ func (s *Service) qualitySuspensionBlocked(ctx context.Context, user, workspace,
 	if !q.AutoSuspendEnabled || q.Revision == "" {
 		return false, nil
 	}
+	models, err := s.repo.ListChannelModels(ctx, user, workspace)
+	if err != nil {
+		return false, err
+	}
 	states, err := s.qualityRepo.ListQualityStates(ctx, user, workspace)
 	if err != nil {
 		return false, err
 	}
 	for _, state := range states {
-		if state.TargetID == target && state.Revision == q.Revision {
+		if state.TargetID == target && state.Revision == q.Revision && state.ChannelRevision == models[target].QualityRevision {
 			return state.Degraded, nil
 		}
 	}

@@ -11,6 +11,7 @@ import (
 )
 
 type fakeQualityRepo struct {
+	models      *fakeRepository
 	mu          sync.Mutex
 	leases      map[string]bool
 	configs     map[string]QualitySettings
@@ -124,6 +125,12 @@ func (r *fakeQualityRepo) saveQualityResult(_ context.Context, u, w string, grou
 	if enabled, exists := r.channels[key][st.TargetID]; !manual && exists && !enabled {
 		return false, nil
 	}
+	if r.models != nil {
+		models, _ := r.models.ListChannelModels(context.Background(), u, w)
+		if models[st.TargetID].QualityRevision != q.ChannelRevision {
+			return false, nil
+		}
+	}
 	current := r.configs[key]
 	if (!manual && !current.Enabled) || current.Revision != q.Revision {
 		return false, nil
@@ -171,6 +178,7 @@ func (r *fakeQualityRepo) GetQualitySample(_ context.Context, user, workspace, t
 }
 
 type fakeQuestionRunner struct {
+	settings          []QualitySettings
 	mu                sync.Mutex
 	calls             int
 	active, maxActive int
@@ -178,9 +186,10 @@ type fakeQuestionRunner struct {
 	delay             time.Duration
 }
 
-func (r *fakeQuestionRunner) ProbeQuality(_ context.Context, _ upstream.ProbeCredential, _ string, _ QualitySettings, q QualityQuestion) qualityProbeResult {
+func (r *fakeQuestionRunner) ProbeQuality(_ context.Context, _ upstream.ProbeCredential, _ string, settings QualitySettings, q QualityQuestion) qualityProbeResult {
 	r.mu.Lock()
 	r.calls++
+	r.settings = append(r.settings, settings)
 	r.active++
 	if r.active > r.maxActive {
 		r.maxActive = r.active
@@ -207,6 +216,7 @@ func qualityTestService(t *testing.T) (*Service, *fakeQualityRepo, *fakeReposito
 		{UserID: "user", AdminAccountID: "ws1", AdminGroupID: "two", PolicyID: "selected-policy"},
 	}
 	quality := newFakeQualityRepo()
+	quality.models = health
 	runner := &fakeQuestionRunner{}
 	account := upstream.AdminGroupAccountInfo{ID: "a", Name: "channel", Platform: ProviderOpenAI}
 	reader := fakePlatformGroupReader{groups: []upstream.AdminGroupInfo{{ID: "one", Name: "one"}, {ID: "two", Name: "two"}, {ID: "off", Name: "off"}}, accountsByGrp: map[string][]upstream.AdminGroupAccountInfo{"one": {account}, "two": {account}, "off": {{ID: "other"}}}, credByAccount: map[string]upstream.ProbeCredential{"a": {BaseURL: "http://unused.invalid", Key: "secret"}}}

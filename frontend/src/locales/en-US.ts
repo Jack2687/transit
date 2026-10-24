@@ -865,6 +865,15 @@ export default {
         label: 'Automatic probes', toggle: 'Toggle automatic probes for {name}', off: 'Probes off',
         hint: 'Stops new scheduled probes; an in-flight request may finish. Manual probes still follow policies and record history. Shared across groups for this channel; quality checks and other switches are independent.'
       },
+      channelModels: {
+        title: 'Channel models', probe: 'Health probe model', quality: 'Quality test model',
+        inheritProbe: 'Follow automation policy (default)', inheritQuality: 'Follow global settings (default)',
+        name: 'Model name', placeholder: 'Enter a model supported by this channel', globalModel: 'Global model: {model}',
+        probeHint: 'Automatic and manual probes use this model. The policy still controls the method, interval, thresholds and priority rules. Without a policy, this applies only to manual lightweight probes.',
+        qualityHint: 'Used for automatic and manual custom questions and API Candy tests. API Pelican tests still require gpt-6-astra.',
+        sharedHint: 'These settings are shared across all groups containing this channel. Follow defaults to restore inheritance. Existing history is retained.',
+        save: 'Save', cancel: 'Cancel', close: 'Close',
+      },
       channelMenus: { automation: 'Automation', automationFor: 'Automation settings for {name}', quality: 'Quality test', qualityFor: 'Quality tests for {name}' },
       channelPriority: {
         label: 'Allow priority changes',

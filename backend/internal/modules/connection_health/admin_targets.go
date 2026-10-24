@@ -309,7 +309,11 @@ func (s *Service) ProbeTarget(ctx context.Context, userID string, targetID strin
 	if err != nil {
 		return nil, err
 	}
-	allSpecs := candidateModelSpecs(target.Models, policies)
+	modelSettings, err := s.repo.ListChannelModels(ctx, userID, adminAccountID)
+	if err != nil {
+		return nil, err
+	}
+	allSpecs := channelProbeSpecs(target.Models, policies, modelSettings[targetID].ProbeModel)
 	specs := allSpecs
 
 	// 按请求的 models 过滤（语义与 ProbeConnection 一致）：显式指定但一个都没命中 -> 明确拒绝。

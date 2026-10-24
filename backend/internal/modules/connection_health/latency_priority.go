@@ -259,7 +259,10 @@ func priorityLessPreferred(platform upstream.Platform, candidate, current int) b
 
 // Shared accounts get one deterministic write. Latency policies supersede legacy
 // multiplier mode, and the least preferred configured value wins across policies.
-func latencyDecisionForTarget(platform upstream.Platform, policies []Policy, states []ConnectionHealthState, samples []PriorityProbeSample, previous *PrioritySyncState, now time.Time) *LatencyPriorityDecision {
+func latencyDecisionForTarget(platform upstream.Platform, policies []Policy, states []ConnectionHealthState, samples []PriorityProbeSample, previous *PrioritySyncState, now time.Time, modelOverride ...string) *LatencyPriorityDecision {
+	if len(modelOverride) > 0 {
+		policies = channelProbePolicies(policies, modelOverride[0])
+	}
 	var chosen *LatencyPriorityDecision
 	// Shared channels execute one winning policy per model, using the same
 	// deterministic selection as the scheduler. All bands evaluate that method.
@@ -403,7 +406,7 @@ func (s *Service) attachLatencyPriorities(ctx context.Context, userID, adminAcco
 				prior = &st
 			}
 			effective := channelSuspensionPolicies(policiesByTarget[a.TargetID], channelSuspensionEnabled(suspensionSettings, a.TargetID))
-			a.LatencyPriority = latencyDecisionForTarget(platform, effective, statesByTarget[a.TargetID], samples[a.TargetID], prior, now)
+			a.LatencyPriority = latencyDecisionForTarget(platform, effective, statesByTarget[a.TargetID], samples[a.TargetID], prior, now, a.ProbeModel)
 		}
 	}
 }

@@ -357,12 +357,22 @@ func TestScheduledGroupProbeDueRetryPauseAndWorkspaceIsolation(t *testing.T) {
 
 type serializedGroupProbeRepo struct {
 	*fakeRepository
-	lease sync.Mutex
+	lease  sync.Mutex
+	leases map[string]*sync.Mutex
 }
 
-func (r *serializedGroupProbeRepo) AcquireTargetLease(context.Context, string) (func(), error) {
+func (r *serializedGroupProbeRepo) AcquireTargetLease(_ context.Context, key string) (func(), error) {
 	r.lease.Lock()
-	return r.lease.Unlock, nil
+	if r.leases == nil {
+		r.leases = map[string]*sync.Mutex{}
+	}
+	if r.leases[key] == nil {
+		r.leases[key] = &sync.Mutex{}
+	}
+	lease := r.leases[key]
+	r.lease.Unlock()
+	lease.Lock()
+	return lease.Unlock, nil
 }
 
 func TestScheduledGroupProbeConcurrentWorkersRunOnlyOnce(t *testing.T) {

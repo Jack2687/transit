@@ -29,6 +29,8 @@ export const getQualitySettings = (): Promise<QualitySettings> => requestJson('/
 export const saveQualitySettings = (config: QualitySettings): Promise<QualitySettings> => requestJson('/connection-health/quality-settings', { method: 'PUT', body: JSON.stringify(config) })
 export const setGroupQuality = (groupId: string, enabled: boolean): Promise<QualityGroup> => requestJson(`/connection-health/admin-groups/${encodeURIComponent(groupId)}/quality`, { method: 'PUT', body: JSON.stringify({ enabled }) })
 
+export const saveChannelModels = (targetId: string, models: { probeModel: string; qualityModel: string }): Promise<{ targetId: string; probeModel: string; qualityModel: string }> => requestJson(`/connection-health/targets/${encodeURIComponent(targetId)}/models`, { method: 'PUT', body: JSON.stringify(models) })
+
 export const setChannelQuality = (targetId: string, enabled: boolean): Promise<QualityChannel> => requestJson(`/connection-health/targets/${encodeURIComponent(targetId)}/quality`, { method: 'PUT', body: JSON.stringify({ enabled }) })
 export const probeChannelQuality = (targetId: string, groupId: string, method: QualityManualMethod): Promise<QualitySample> => requestJson(`/connection-health/targets/${encodeURIComponent(targetId)}/quality-probe`, { method: 'POST', body: JSON.stringify({ groupId, method }) })
 export const getChannelQualityHistory = (targetId: string): Promise<QualitySample[]> => requestJson(`/connection-health/targets/${encodeURIComponent(targetId)}/quality-history`)

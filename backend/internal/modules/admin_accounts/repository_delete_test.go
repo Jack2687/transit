@@ -7,6 +7,7 @@ import (
 
 func TestWorkspaceDeleteStatementsCoverAllWorkspaceTables(t *testing.T) {
 	want := []string{
+		"connection_health_channel_models",
 		"connection_health_quality_settings",
 		"connection_health_quality_channels",
 		"connection_health_quality_groups",

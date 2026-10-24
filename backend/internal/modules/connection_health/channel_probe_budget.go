@@ -82,10 +82,12 @@ func (s *Service) attachChannelProbeBudgets(ctx context.Context, userID, adminAc
 	// as the scheduler. A shared channel must show the same quota in every group.
 	byTarget := make(map[string][]Policy)
 	models := make(map[string][]string)
+	modelOverrides := make(map[string]string)
 	suspensionEnabled := make(map[string]bool)
 	for _, group := range groups {
 		for _, account := range group.Accounts {
 			suspensionEnabled[account.TargetID] = account.SuspensionEnabled
+			modelOverrides[account.TargetID] = account.ProbeModel
 			models[account.TargetID] = append(models[account.TargetID], splitModelList(account.Models)...)
 			for _, id := range account.AssignedPolicyIDs {
 				if policy, ok := policies[id]; ok {
@@ -97,7 +99,7 @@ func (s *Service) attachChannelProbeBudgets(ctx context.Context, userID, adminAc
 	budgets := make(map[string][]ChannelProbeBudget)
 	for target, effective := range byTarget {
 		indexes := make(map[string]int)
-		for _, spec := range candidateModelSpecs(models[target], channelSuspensionPolicies(effective, suspensionEnabled[target])) {
+		for _, spec := range channelProbeSpecs(models[target], channelSuspensionPolicies(effective, suspensionEnabled[target]), modelOverrides[target]) {
 			id := spec.policy.ID
 			index, exists := indexes[id]
 			if !exists {

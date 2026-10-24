@@ -31,6 +31,7 @@ const (
 )
 
 var workspaceDeleteStatements = []workspaceDeleteStatement{
+	{Name: "connection_health_channel_models", SQL: `DELETE FROM connection_health_channel_models WHERE user_id = $1 AND admin_account_id = $2`},
 	{Name: "connection_health_quality_settings", SQL: `DELETE FROM connection_health_quality_settings WHERE user_id = $1 AND admin_account_id = $2`},
 	{Name: "connection_health_quality_channels", SQL: `DELETE FROM connection_health_quality_channels WHERE user_id = $1 AND admin_account_id = $2`},
 	{Name: "connection_health_quality_groups", SQL: `DELETE FROM connection_health_quality_groups WHERE user_id = $1 AND admin_account_id = $2`},
@@ -77,6 +78,7 @@ var workspaceDeleteStatements = []workspaceDeleteStatement{
 }
 
 var legacyWorkspaceTables = []workspaceTableDescriptor{
+	{Name: "connection_health_channel_models", WorkspaceColumn: "admin_account_id"},
 	{Name: "lottery_embed_configs", WorkspaceColumn: "admin_account_id"},
 	{Name: "lottery_campaigns", WorkspaceColumn: "admin_account_id"},
 	{Name: "lottery_prizes", WorkspaceColumn: "admin_account_id"},

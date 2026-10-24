@@ -61,6 +61,9 @@ func qualityTestPool(t *testing.T) (context.Context, *pgxpool.Pool) {
 	if _, err := pool.Exec(ctx, qualityChannelIndependentSchema); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := pool.Exec(ctx, strings.ReplaceAll(channelModelsSchema, "CREATE TABLE IF NOT EXISTS", "CREATE TEMP TABLE IF NOT EXISTS")); err != nil {
+		t.Fatal(err)
+	}
 	return ctx, pool
 }
 func TestQualityPostgresPersistenceIsolationAndStaleWrites(t *testing.T) {

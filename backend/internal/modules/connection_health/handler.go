@@ -21,6 +21,7 @@ func RegisterRoutes(mux *http.ServeMux, service *Service) {
 	mux.HandleFunc("PUT /api/connection-health/quality-settings", handler.saveQualitySettings)
 	mux.HandleFunc("PUT /api/connection-health/admin-groups/{id}/quality", handler.setGroupQuality)
 	mux.HandleFunc("PUT /api/connection-health/targets/{id}/quality", handler.setChannelQuality)
+	mux.HandleFunc("PUT /api/connection-health/targets/{id}/models", handler.saveChannelModels)
 	mux.HandleFunc("POST /api/connection-health/targets/{id}/quality-probe", handler.probeChannelQuality)
 	mux.HandleFunc("GET /api/connection-health/targets/{id}/quality-history", handler.qualityHistory)
 	mux.HandleFunc("GET /api/connection-health/targets/{id}/quality-history/{sampleId}", handler.qualityHistoryDetail)

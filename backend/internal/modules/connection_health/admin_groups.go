@@ -71,6 +71,9 @@ type AdminGroupHealthSummary struct {
 // 只要后端能安全解析 base_url + key + model 就可独立探活，不再需要 real_connections。
 // 绝不包含 key / token / cookie / credentials / secret / authorization 明文。
 type AdminGroupAccount struct {
+	ProbeModel                      string                   `json:"probeModel"`
+	QualityModel                    string                   `json:"qualityModel"`
+	QualityGlobalModel              string                   `json:"qualityGlobalModel"`
 	QualitySuspensionEnabled        bool                     `json:"qualitySuspensionEnabled"`
 	QualitySuspensionRestorePending bool                     `json:"qualitySuspensionRestorePending"`
 	AutoProbeEnabled                bool                     `json:"autoProbeEnabled"`
@@ -201,6 +204,10 @@ func (s *Service) readAdminGroups(ctx context.Context, userID string, options ad
 	if err != nil {
 		return nil, err
 	}
+	modelSettings, err := s.repo.ListChannelModels(ctx, userID, adminAccountID)
+	if err != nil {
+		return nil, err
+	}
 	autoProbeSettings, err := s.repo.ListChannelAutoProbes(ctx, userID, adminAccountID)
 	if err != nil {
 		return nil, err
@@ -226,7 +233,7 @@ func (s *Service) readAdminGroups(ctx context.Context, userID string, options ad
 		return nil, err
 	}
 	qualitySelection := newQualitySelection(policies, assignments, groupAssignments, groupExclusions)
-	qualityPaused := qualityHealthPausedTargets(states, policies, assignments, groupAssignments, groupExclusions, suspensionSettings)
+	qualityPaused := qualityHealthPausedTargets(states, policies, assignments, groupAssignments, groupExclusions, suspensionSettings, modelSettings)
 	priorityStates, err := s.repo.ListPrioritySyncStates(ctx, userID, adminAccountID)
 	if err != nil {
 		return nil, err
@@ -349,7 +356,7 @@ func (s *Service) readAdminGroups(ctx context.Context, userID string, options ad
 				}
 			}
 			suspensionEnabled := channelSuspensionEnabled(suspensionSettings, targetID)
-			activeSpecs := candidateModelSpecs(splitModelList(acc.Models), channelSuspensionPolicies(effectivePolicies, suspensionEnabled))
+			activeSpecs := channelProbeSpecs(splitModelList(acc.Models), channelSuspensionPolicies(effectivePolicies, suspensionEnabled), modelSettings[targetID].ProbeModel)
 			hasProbePolicy := hasEnabledProbePolicy(effectivePolicies)
 			modelHealth, unprobedModels := modelHealthForSpecs(stateIndex[targetID], activeSpecs)
 			if credentialReason := latestCredentialUnavailableReason(modelHealth); credentialReason != "" {
@@ -365,6 +372,8 @@ func (s *Service) readAdminGroups(ctx context.Context, userID string, options ad
 			}
 
 			item := AdminGroupAccount{
+				ProbeModel:                 modelSettings[targetID].ProbeModel,
+				QualityModel:               modelSettings[targetID].QualityModel,
 				QualitySuspensionEnabled:   qualitySuspensionSettings[targetID],
 				AutoProbeEnabled:           hasProbePolicy && channelAutoProbeEnabled(autoProbeSettings, targetID),
 				PriorityEnabled:            channelPriorityEnabled(prioritySettings, targetID),

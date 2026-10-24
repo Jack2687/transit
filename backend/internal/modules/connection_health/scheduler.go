@@ -458,6 +458,10 @@ func (s *Service) collectAdminProbeJobsWithGroupsAndCache(ctx context.Context, p
 			log.Printf("[connection-health] scheduler load admin inventory failed user_id=%s admin_account_id=%s err=%v", ws.userID, ws.adminAccountID, err)
 			continue
 		}
+		modelSettings, err := s.repo.ListChannelModels(ctx, ws.userID, ws.adminAccountID)
+		if err != nil {
+			continue
+		}
 		autoProbeSettings, err := s.repo.ListChannelAutoProbes(ctx, ws.userID, ws.adminAccountID)
 		if err != nil {
 			continue
@@ -543,7 +547,7 @@ func (s *Service) collectAdminProbeJobsWithGroupsAndCache(ctx context.Context, p
 				continue
 			}
 			candidate := candidates[targetID]
-			specs := candidateModelSpecs(candidate.target.Models, candidate.policies)
+			specs := channelProbeSpecs(candidate.target.Models, candidate.policies, modelSettings[targetID].ProbeModel)
 			for index := range specs {
 				if source, exists := candidate.policySources[specs[index].policy.ID]; exists {
 					specs[index].eventGroupResolved = source.resolved
@@ -685,8 +689,12 @@ func (s *Service) currentScheduledModels(ctx context.Context, job adminProbeJob)
 		}
 		effective = mergePoliciesByID(effective, groupPolicies[group.ID])
 	}
+	modelSettings, err := s.repo.ListChannelModels(ctx, job.userID, job.adminAccountID)
+	if err != nil {
+		return nil, err
+	}
 	suspensionEnabled, readErr := s.repo.GetChannelSuspension(ctx, job.userID, job.adminAccountID, job.target.TargetID)
-	specs := candidateModelSpecs(job.target.Models, channelSuspensionPolicies(effective, readErr == nil && suspensionEnabled))
+	specs := channelProbeSpecs(job.target.Models, channelSuspensionPolicies(effective, readErr == nil && suspensionEnabled), modelSettings[job.target.TargetID].ProbeModel)
 	for i := range specs {
 		source := sources[specs[i].policy.ID]
 		specs[i].eventGroupResolved, specs[i].eventAdminGroupID, specs[i].eventAdminGroupName = source.resolved, source.adminGroupID, source.adminGroupName
