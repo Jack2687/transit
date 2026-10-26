@@ -8,13 +8,14 @@ import { connectionHealthMessageKey } from '../../composables/useConnectionHealt
 import type { AdminGroupAccount } from '../../types/connectionHealth'
 
 const props = defineProps<{ account: AdminGroupAccount }>()
-const emit = defineEmits<{ close: []; saved: [models: { targetId: string; probeModel: string; qualityModel: string }] }>()
+const emit = defineEmits<{ close: []; saved: [models: { targetId: string; probeModel: string; qualityModel: string; qualityBaseUrl: string }] }>()
 const { t, te } = useI18n()
 const p = 'admin.connectionHealth.channelModels'
 const inheritProbe = ref(!props.account.probeModel)
 const inheritQuality = ref(!props.account.qualityModel)
 const probeModel = ref(props.account.probeModel || '')
 const qualityModel = ref(props.account.qualityModel || props.account.qualityGlobalModel || '')
+const qualityBaseUrl = ref(props.account.qualityBaseUrl || '')
 const busy = ref(false)
 const error = ref('')
 const dialog = ref<HTMLElement | null>(null)
@@ -39,6 +40,7 @@ async function save() {
     const saved = await saveChannelModels(props.account.targetId, {
       probeModel: inheritProbe.value ? '' : probeModel.value.trim(),
       qualityModel: inheritQuality.value ? '' : qualityModel.value.trim(),
+      qualityBaseUrl: qualityBaseUrl.value.trim(),
     })
     emit('saved', saved)
     emit('close')
@@ -68,6 +70,8 @@ async function save() {
           <p v-if="inheritQuality && account.qualityGlobalModel" class="break-all text-xs text-muted-foreground">{{ t(`${p}.globalModel`, { model: account.qualityGlobalModel }) }}</p>
           <label v-if="!inheritQuality" class="block space-y-1 text-xs text-muted-foreground"><span>{{ t(`${p}.name`) }}</span><input v-model="qualityModel" required maxlength="200" autocomplete="off" :placeholder="t(`${p}.placeholder`)" class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground" /></label>
           <p class="text-xs leading-5 text-muted-foreground">{{ t(`${p}.qualityHint`) }}</p>
+          <label class="block space-y-1 text-xs text-muted-foreground"><span>{{ t(`${p}.qualityBaseUrl`) }}</span><input v-model="qualityBaseUrl" type="url" maxlength="2048" autocomplete="off" placeholder="https://api.example.com/v1" class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground" /></label>
+          <p class="text-xs leading-5 text-muted-foreground">{{ t(`${p}.qualityBaseUrlHint`) }}</p>
         </fieldset>
         <p class="text-xs leading-5 text-muted-foreground">{{ t(`${p}.sharedHint`) }}</p>
         <p v-if="error" role="alert" class="text-sm text-red-600 dark:text-red-400">{{ error }}</p>

@@ -199,6 +199,7 @@ func (s *Service) attachQuality(ctx context.Context, user, workspace string, gro
 			a := &g.Accounts[j]
 			a.QualityModel = models[a.TargetID].QualityModel
 			a.QualityGlobalModel = q.Model
+			a.QualityBaseURL = models[a.TargetID].QualityBaseURL
 			a.QualitySuspended = suspended[a.TargetID]
 			a.QualitySuspensionRestorePending = !a.QualitySuspensionEnabled && a.QualitySuspended
 			a.QualityEnabled = a.QualitySelected && !disabledChannels[a.TargetID] && (enabled[g.ID] || independentChannels[a.TargetID])
@@ -513,6 +514,11 @@ func (s *Service) runQualityCandidate(ctx context.Context, scope QualityScope, s
 		current, err = s.qualityRepo.GetQualitySettings(ctx, scope.UserID, scope.WorkspaceID)
 		if err != nil || (!manual && !current.Enabled) || current.Revision != q.Revision {
 			return QualitySample{}, unavailable
+		}
+		// Override only this quality request's destination. Always resolve the key
+		// from the original channel; health probes and upstream settings are untouched.
+		if baseURL := selection.models[c.targetID].QualityBaseURL; baseURL != "" {
+			cred.BaseURL = baseURL
 		}
 		outcome := s.qualityRunner.ProbeQuality(ctx, cred, c.account.Platform, q, question)
 		sample.InputTokens, sample.OutputTokens = outcome.InputTokens, outcome.OutputTokens

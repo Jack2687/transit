@@ -866,7 +866,9 @@ export default {
         hint: 'Stops new scheduled probes; an in-flight request may finish. Manual probes still follow policies and record history. Shared across groups for this channel; quality checks and other switches are independent.'
       },
       channelModels: {
-        title: 'Channel models', probe: 'Health probe model', quality: 'Quality test model',
+        qualityBaseUrl: 'Quality API base URL (optional)',
+        qualityBaseUrlHint: 'Leave blank to use the original channel address. API Candy and Pelican require a public HTTPS address. Used for automatic and manual quality tests; the key is still fetched from the original channel. Health probe addresses are unchanged.',
+        title: 'Channel test settings', probe: 'Health probe model', quality: 'Quality test model',
         inheritProbe: 'Follow automation policy (default)', inheritQuality: 'Follow global settings (default)',
         name: 'Model name', placeholder: 'Enter a model supported by this channel', globalModel: 'Global model: {model}',
         probeHint: 'Automatic and manual probes use this model. The policy still controls the method, interval, thresholds and priority rules. Without a policy, this applies only to manual lightweight probes.',
@@ -1025,6 +1027,7 @@ export default {
         manualHints: { questions: 'Run one check using the saved custom question bank.', manxue_candy: 'Run a Manxue API Candy test. Sends this channel’s URL, key and model to Manxue and consumes channel credits.', manxue_pelican: 'Run a Manxue API Pelican test with the required gpt-6-astra model. Sends this channel’s URL and key to Manxue and consumes channel credits.' },
         probingNow: 'Checking quality…', probeBusy: 'A quality check is already running for this channel. Refresh shortly to see its result.', probeUnavailable: 'This channel cannot be checked or its configuration has changed. Check the channel and refresh.',
         stripTitle: 'Quality checks', toggleGroup: 'Toggle quality detection for {name}', globalPaused: 'Globally paused', configureFirst: 'Enable and save global quality settings first, then enable groups on the left.',
+        invalidBaseUrl: 'Enter a valid HTTP(S) API base URL without credentials, query parameters or fragments.',
         invalidModel: 'Enter a valid detection model.', invalidConfig: 'Check parameters: interval 10–86400s, streaks 1–20, concurrency 1–32, question timeout 5–300s / API timeout 5–600s, output tokens 128–32768, history 1–1000.', invalidQuestion: 'Enter a question name, prompt and answer; check matching mode and duration threshold (1–300000 ms).', invalidRegex: 'The answer regular expression is invalid.', questionsRequired: 'Enable at least one question. The bank supports up to 50 questions.',
         statuses: { qualitySuspended: 'Quality suspended', manualOnly: 'Manual tests only', healthPaused: 'Paused by health check', normal: 'Normal', suspect: 'Suspected degradation', degraded: 'Degraded', recovering: 'Recovering', error: 'Check failed', off: 'Disabled', notSelected: 'Not selected', pending: 'Pending', unavailable: 'History unavailable' },
         selectionHint: 'This channel is not selected in automation policies and will not be tested. Existing history is retained.',

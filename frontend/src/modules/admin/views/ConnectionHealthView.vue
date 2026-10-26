@@ -65,12 +65,13 @@ const { adminGroups, isLoading, errorKey: groupLoadError, detailErrors, detailLo
 const groupProbeOpen = ref(false)
 const probeGroup = ref<AdminGroupHealth | null>(null)
 const channelModelsTarget = ref<AdminGroupAccount | null>(null)
-async function onChannelModelsSaved(saved: { targetId: string; probeModel: string; qualityModel: string }) {
+async function onChannelModelsSaved(saved: { targetId: string; probeModel: string; qualityModel: string; qualityBaseUrl: string }) {
   for (const group of adminGroups.value) {
     for (const account of group.accounts) {
       if (account.targetId === saved.targetId) {
         account.probeModel = saved.probeModel
         account.qualityModel = saved.qualityModel
+        account.qualityBaseUrl = saved.qualityBaseUrl
       }
     }
   }

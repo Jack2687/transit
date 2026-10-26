@@ -73,6 +73,7 @@ type AdminGroupHealthSummary struct {
 type AdminGroupAccount struct {
 	ProbeModel                      string                   `json:"probeModel"`
 	QualityModel                    string                   `json:"qualityModel"`
+	QualityBaseURL                  string                   `json:"qualityBaseUrl"`
 	QualityGlobalModel              string                   `json:"qualityGlobalModel"`
 	QualitySuspensionEnabled        bool                     `json:"qualitySuspensionEnabled"`
 	QualitySuspensionRestorePending bool                     `json:"qualitySuspensionRestorePending"`
@@ -374,6 +375,7 @@ func (s *Service) readAdminGroups(ctx context.Context, userID string, options ad
 			item := AdminGroupAccount{
 				ProbeModel:                 modelSettings[targetID].ProbeModel,
 				QualityModel:               modelSettings[targetID].QualityModel,
+				QualityBaseURL:             modelSettings[targetID].QualityBaseURL,
 				QualitySuspensionEnabled:   qualitySuspensionSettings[targetID],
 				AutoProbeEnabled:           hasProbePolicy && channelAutoProbeEnabled(autoProbeSettings, targetID),
 				PriorityEnabled:            channelPriorityEnabled(prioritySettings, targetID),

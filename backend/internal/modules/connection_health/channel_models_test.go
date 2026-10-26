@@ -35,7 +35,7 @@ func (f *fakeRepository) SaveChannelModels(_ context.Context, user, workspace st
 	}
 	previous := f.channelModels[key][item.TargetID]
 	item.QualityRevision = previous.QualityRevision
-	if previous.QualityModel != item.QualityModel {
+	if previous.QualityModel != item.QualityModel || previous.QualityBaseURL != item.QualityBaseURL {
 		item.QualityRevision, _ = newID()
 	}
 	f.channelModels[key][item.TargetID] = item
@@ -47,17 +47,17 @@ func TestChannelModelsValidationAndDefaultInheritance(t *testing.T) {
 	ctx := context.Background()
 	q := enableManualQuality(t, svc)
 	target := "sub2api:ws1:a"
-	for _, bad := range []ChannelModels{{QualityModel: strings.Repeat("m", 201)}, {ProbeModel: "invalid\nmodel"}} {
+	for _, bad := range []ChannelModelsInput{{QualityModel: strings.Repeat("m", 201)}, {ProbeModel: "invalid\nmodel"}} {
 		if _, err := svc.SaveChannelModels(ctx, "user", target, bad); err == nil {
 			t.Fatal("invalid model accepted")
 		}
 	}
 	for _, target := range []string{"sub2api:other:a", "sub2api:ws1:missing", "newapi:ws1:a"} {
-		if _, err := svc.SaveChannelModels(ctx, "user", target, ChannelModels{ProbeModel: "probe"}); err == nil {
+		if _, err := svc.SaveChannelModels(ctx, "user", target, ChannelModelsInput{ProbeModel: "probe"}); err == nil {
 			t.Fatal("foreign target accepted")
 		}
 	}
-	_, err := svc.SaveChannelModels(ctx, "user", target, ChannelModels{ProbeModel: " probe ", QualityModel: " quality "})
+	_, err := svc.SaveChannelModels(ctx, "user", target, ChannelModelsInput{ProbeModel: " probe ", QualityModel: " quality "})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func TestChannelModelsValidationAndDefaultInheritance(t *testing.T) {
 	if len(quality.channels) != 0 || len(health.channelAutoProbes) != 0 {
 		t.Fatal("model save changed automation switches")
 	}
-	if _, err = svc.SaveChannelModels(ctx, "user", target, ChannelModels{}); err != nil {
+	if _, err = svc.SaveChannelModels(ctx, "user", target, ChannelModelsInput{}); err != nil {
 		t.Fatal(err)
 	}
 	sample, err := svc.ProbeChannelQuality(ctx, "user", target, "one", "questions")
@@ -97,7 +97,7 @@ func TestChannelQualityModelAutomaticManualRevisionAndHistory(t *testing.T) {
 	ctx := context.Background()
 	q := enableManualQuality(t, svc)
 	target := "sub2api:ws1:a"
-	_, err := svc.SaveChannelModels(ctx, "user", target, ChannelModels{QualityModel: "custom-quality"})
+	_, err := svc.SaveChannelModels(ctx, "user", target, ChannelModelsInput{QualityModel: "custom-quality"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,12 +116,12 @@ func TestChannelQualityModelAutomaticManualRevisionAndHistory(t *testing.T) {
 		}
 	}
 	before := repo.states[qualityScopeKey("user", "ws1")][target]
-	_, _ = svc.SaveChannelModels(ctx, "user", target, ChannelModels{ProbeModel: "only-health-changed", QualityModel: "custom-quality"})
+	_, _ = svc.SaveChannelModels(ctx, "user", target, ChannelModelsInput{ProbeModel: "only-health-changed", QualityModel: "custom-quality"})
 	settings, _ := health.ListChannelModels(ctx, "user", "ws1")
 	if settings[target].QualityRevision != before.ChannelRevision {
 		t.Fatal("health edit reset quality progress")
 	}
-	_, _ = svc.SaveChannelModels(ctx, "user", target, ChannelModels{QualityModel: "next-quality"})
+	_, _ = svc.SaveChannelModels(ctx, "user", target, ChannelModelsInput{QualityModel: "next-quality"})
 	svc.runQualityScope(ctx, QualityScope{UserID: "user", WorkspaceID: "ws1"}, make(chan struct{}, 32))
 	state := repo.states[qualityScopeKey("user", "ws1")][target]
 	if state.Latest.Model != "next-quality" || state.Successes != 1 || state.Failures != 0 || state.Revision != q.Revision {
@@ -132,7 +132,7 @@ func TestChannelQualityModelAutomaticManualRevisionAndHistory(t *testing.T) {
 	}
 	// A model change during the request must not append old-model evidence.
 	runner.hook = func() {
-		_, err := svc.SaveChannelModels(ctx, "user", target, ChannelModels{QualityModel: "changed-in-flight"})
+		_, err := svc.SaveChannelModels(ctx, "user", target, ChannelModelsInput{QualityModel: "changed-in-flight"})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -151,7 +151,7 @@ func TestChannelProbeModelSchedulerManualAndPriority(t *testing.T) {
 	svc.accounts = fakeAdminAccountResolver{id: "ws1"}
 	svc.dispatcher = panicIfCalledRemoteActionRunner{}
 	target := "sub2api:ws1:0"
-	_, err := svc.SaveChannelModels(ctx, "user1", target, ChannelModels{ProbeModel: "custom-probe"})
+	_, err := svc.SaveChannelModels(ctx, "user1", target, ChannelModelsInput{ProbeModel: "custom-probe"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,7 +187,7 @@ func TestChannelProbeModelSchedulerManualAndPriority(t *testing.T) {
 	if p.ModelTargets[0].ModelName != "model" || repo.policies[0].ModelTargets[0].ModelName != "model-0" {
 		t.Fatal("shared policy was mutated")
 	}
-	_, _ = svc.SaveChannelModels(ctx, "user1", target, ChannelModels{})
+	_, _ = svc.SaveChannelModels(ctx, "user1", target, ChannelModelsInput{})
 	models, err = svc.DiscoverTargetModels(ctx, "user1", target)
 	if err != nil || models[0].ID != "model-0" {
 		t.Fatal("policy inheritance not restored", err)
@@ -218,7 +218,7 @@ func TestChannelQualityModelChangeKeepsSuspensionUntilRecovery(t *testing.T) {
 	if !f.health.targetActionStates[key].QualitySuspended {
 		t.Fatal("fixture did not suspend")
 	}
-	if _, err := f.svc.SaveChannelModels(context.Background(), "user", qualityActionTarget, ChannelModels{QualityModel: "replacement"}); err != nil {
+	if _, err := f.svc.SaveChannelModels(context.Background(), "user", qualityActionTarget, ChannelModelsInput{QualityModel: "replacement"}); err != nil {
 		t.Fatal(err)
 	}
 	f.maintain()
@@ -242,7 +242,7 @@ func TestChannelProbeOverridePreservesEveryProbeModeAndInactiveOptOut(t *testing
 			svc, repo, _ := cadenceFixture(1)
 			svc.accounts = fakeAdminAccountResolver{id: "ws1"}
 			repo.policies[0].ProbeMode = mode
-			_, err := svc.SaveChannelModels(ctx, "user1", "sub2api:ws1:0", ChannelModels{ProbeModel: "channel-model"})
+			_, err := svc.SaveChannelModels(ctx, "user1", "sub2api:ws1:0", ChannelModelsInput{ProbeModel: "channel-model"})
 			if err != nil {
 				t.Fatal(err)
 			}

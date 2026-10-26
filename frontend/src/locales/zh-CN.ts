@@ -866,7 +866,9 @@ export default {
         hint: '关闭后停止发起新的定时探活，正在执行的请求会完成；手动探活仍按策略执行并记录历史。同一渠道各分组共用此设置，降智测试和其他开关独立控制。'
       },
       channelModels: {
-        title: '渠道模型设置', probe: '探活模型', quality: '降智检测模型',
+        qualityBaseUrl: '降智检测请求地址（选填）',
+        qualityBaseUrlHint: '填写渠道 API 基础地址；留空使用原渠道地址。API 糖果和鹈鹕测试需公网 HTTPS 地址。自动和手动降智测试共用，Key 仍自动从原渠道获取，探活地址不变。',
+        title: '渠道检测设置', probe: '探活模型', quality: '降智检测模型',
         inheritProbe: '跟随自动化策略（默认）', inheritQuality: '跟随全局配置（默认）',
         name: '模型名称', placeholder: '填写渠道支持的模型名称', globalModel: '全局模型：{model}',
         probeHint: '自动探活和手动探活均使用此模型，探活方式、间隔、阈值及优先级规则继续跟随策略。未配置策略时仅用于手动轻量探活。',
@@ -1024,6 +1026,7 @@ export default {
         manualHints: { questions: '立即使用已保存的自定义题库检测一次。', manxue_candy: '立即通过 Manxue API 进行糖果测试，将提交此渠道的地址、Key 和模型，并消耗渠道额度。', manxue_pelican: '立即通过 Manxue API 使用固定模型 gpt-6-astra 进行鹈鹕测试，将提交此渠道的地址和 Key，并消耗渠道额度。' },
         probingNow: '正在降智检测…', probeBusy: '该渠道正在降智检测，请稍后刷新查看结果。', probeUnavailable: '当前渠道不可检测或配置已变更，请检查渠道并刷新重试。',
         stripTitle: '降智检测', toggleGroup: '切换分组 {name} 的降智检测', globalPaused: '全局暂停', configureFirst: '请先启用并保存全局降智检测配置，再开启左侧分组。',
+        invalidBaseUrl: '请输入有效的 HTTP(S) API 基础地址，不含账号密码、查询参数或片段。',
         invalidModel: '请输入有效的检测模型。', invalidConfig: '请检查检测参数：间隔 10～86400 秒，连续次数 1～20，并发 1～32，题目超时 5～300 秒 / API 超时 5～600 秒，输出 Token 128～32768，历史 1～1000。', invalidQuestion: '请填写题目名称、内容和答案，并检查耗时阈值（1～300000 ms）及匹配方式。', invalidRegex: '答案正则表达式无效。', questionsRequired: '开启检测需至少启用一道题，题库最多 50 题。',
         statuses: { qualitySuspended: '降智暂停', manualOnly: '仅手动测试', healthPaused: '随探活暂停', normal: '无降智', suspect: '疑似降智', degraded: '降智', recovering: '恢复观察', error: '检测失败', off: '未开启', notSelected: '未选择', pending: '待检测', unavailable: '记录不可用' },
         selectionHint: '此渠道未在自动化策略中选中，不执行降智检测；已有历史记录保留。',

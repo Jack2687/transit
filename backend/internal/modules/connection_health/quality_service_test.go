@@ -178,6 +178,7 @@ func (r *fakeQualityRepo) GetQualitySample(_ context.Context, user, workspace, t
 }
 
 type fakeQuestionRunner struct {
+	credentials       []upstream.ProbeCredential
 	settings          []QualitySettings
 	mu                sync.Mutex
 	calls             int
@@ -186,10 +187,11 @@ type fakeQuestionRunner struct {
 	delay             time.Duration
 }
 
-func (r *fakeQuestionRunner) ProbeQuality(_ context.Context, _ upstream.ProbeCredential, _ string, settings QualitySettings, q QualityQuestion) qualityProbeResult {
+func (r *fakeQuestionRunner) ProbeQuality(_ context.Context, cred upstream.ProbeCredential, _ string, settings QualitySettings, q QualityQuestion) qualityProbeResult {
 	r.mu.Lock()
 	r.calls++
 	r.settings = append(r.settings, settings)
+	r.credentials = append(r.credentials, cred)
 	r.active++
 	if r.active > r.maxActive {
 		r.maxActive = r.active
